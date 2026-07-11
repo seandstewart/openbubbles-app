@@ -19,6 +19,7 @@ All agent resources are located in [`.agents/`](.agents/).
 | [`.agents/rules/adr.md`](.agents/rules/adr.md) | When and how to write Architecture Decision Records |
 | [`.agents/rules/project-planning.md`](.agents/rules/project-planning.md) | How to structure projects and milestone files |
 | [`.agents/rules/caveman.md`](.agents/rules/caveman.md) | Caveman mode always on — terse responses by default |
+| [`.agents/rules/worktree-workflow.md`](.agents/rules/worktree-workflow.md) | When and how to use git worktrees for large projects |
 
 ## Reference Documentation
 
@@ -26,6 +27,7 @@ All agent resources are located in [`.agents/`](.agents/).
 |---|---|
 | [`.agents/reference/architecture.md`](.agents/reference/architecture.md) | Overall 4-layer architecture, tech stack, global singletons, entry points |
 | [`.agents/reference/rust-backend.md`](.agents/reference/rust-backend.md) | Tokio runtime, SharedPushState, recv_wait, FFI bridge, keystore |
+| [`.agents/reference/worktree-workflow.md`](.agents/reference/worktree-workflow.md) | Worktree layout, lifecycle, parallel branches, agent context rules |
 | [`.agents/reference/flutter-services.md`](.agents/reference/flutter-services.md) | RustPushService, sync managers, ActionHandler, CloudKit, LifecycleService |
 | [`.agents/reference/flutter-ui.md`](.agents/reference/flutter-ui.md) | Widget tree, GetX controllers, event bus, caching, ObjectBox watcher patterns |
 | [`.agents/reference/android-native.md`](.agents/reference/android-native.md) | APNService, DartWorker, notification pipeline, lifecycle, broadcast receivers |
