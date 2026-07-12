@@ -21,6 +21,11 @@ import java.net.URISyntaxException
 import java.net.URLEncoder
 import org.json.JSONObject
 import java.util.Collections.singletonList
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 
 class SocketIOForegroundService : Service() {
@@ -39,6 +44,8 @@ class SocketIOForegroundService : Service() {
         const val DESTROYED = "BlueBubbles Service was destroyed!"
         const val DISABLED = "BlueBubbles Foreground Service is disabled"
     }
+
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private var mSocket: Socket? = null
 
@@ -191,10 +198,10 @@ class SocketIOForegroundService : Service() {
     private fun tryReconnect() {
         if (mSocket != null && !mSocket!!.connected()) {
             Log.e(Constants.logTag, "Waiting 30 seconds before reconnecting...")
-
-            // Sleep for 30 seconds before attempting to reconnect
-            Thread.sleep(30000)
-            mSocket!!.connect()
+            scope.launch {
+                delay(30_000)
+                mSocket?.connect()
+            }
         }
     }
 
