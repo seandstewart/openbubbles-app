@@ -255,7 +255,9 @@ class IncrementalSyncManager extends SyncManager {
         }
 
         // Save the last synced timestamp
-        if (msg.dateCreated != null && lastSyncedTimestamp == null || msg.dateCreated!.millisecondsSinceEpoch > lastSyncedTimestamp!) {
+        if (msg.dateCreated != null &&
+            (lastSyncedTimestamp == null ||
+             msg.dateCreated!.millisecondsSinceEpoch > lastSyncedTimestamp!)) {
           lastSyncedTimestamp = msg.dateCreated!.millisecondsSinceEpoch;
         }
       }
