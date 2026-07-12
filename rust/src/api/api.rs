@@ -529,7 +529,7 @@ pub struct SharedPushState {
     pub anisette: ArcAnisetteClient<DefaultAnisetteProvider>,
     pub conn: APSConnection,
     pub icloud_services: Option<SharedICloudServices>,
-    
+
     // APN services
     pub client: Arc<IMClient>,
     pub ft_client: Arc<FTClient>,
@@ -601,9 +601,71 @@ impl SharedPushState {
         let account = restore_account(path.clone(), &anisette, config, &conn).await;
 
         info!("account {}", account.is_some());
-        
+
 
         let (cancel_poll, local_broadcast, watcher) = build_watcher(&conn, &client);
+
+        // === PARALLELIZABLE ICLOUD SERVICES (ADR-001) ===
+        // Group 1: Critical path (make_cloudkit) + keychain [sequential ~200-500ms]
+        // Group 2: iCloud services parallel [~400-800ms concurrent with Group 3]
+        // Group 3: Independent services parallel [~100-300ms concurrent with Groups 1+2]
+        let (icloud_services, (ft_client, idms_client)) = tokio::join!(
+            // iCloud services async block (Groups 1+2)
+            async {
+                if let Some(account) = &account {
+                    let token_provider = make_token_provider(account, config);
+                    let cloudkit = make_cloudkit(path.clone(), &anisette, config, &token_provider)
+                        .await
+                        .expect("cloudkit initialization failed");
+                    let keychain = make_keychain(path.clone(), &cloudkit, &anisette, config, &token_provider);
+
+                    // Group 2: Parallel iCloud services (all depend on cloudkit/keychain)
+                    let (passwords, profiles, findmy, sharedstreams, cloud_msgs, statuskit) = tokio::join!(
+                        async {
+                            if let Some(ref kc) = keychain {
+                                Some(make_passwords(path.clone(), kc, &cloudkit, &client, &conn).await)
+                            } else {
+                                None
+                            }
+                        },
+                        make_profiles(&cloudkit),
+                        async {
+                            if let Some(ref kc) = keychain {
+                                make_findmy(path.clone(), &token_provider, &conn, &cloudkit, kc, &anisette, config, &client).await
+                            } else {
+                                None
+                            }
+                        },
+                        make_shared_streams(path.clone(), &conn, &anisette, config, &token_provider),
+                        async {
+                            if let Some(ref kc) = keychain {
+                                Some(make_cloud_messages_client(&cloudkit, kc))
+                            } else {
+                                None
+                            }
+                        },
+                        make_statuskit(path.clone(), &token_provider, &conn, config, &client)
+                    );
+
+                    Some(SharedICloudServices {
+                        account: account.clone(),
+                        token_provider: token_provider.clone(),
+                        cloudkit_client: Some(cloudkit.clone()),
+                        keychain: keychain.clone(),
+                        passwords,
+                        profiles_client: profiles,
+                        fmfd: findmy,
+                        sharedstreams,
+                        cloud_messages_client: cloud_msgs,
+                        statuskit_client: statuskit,
+                    })
+                } else {
+                    None
+                }
+            },
+            // Group 3: Independent services (parallel with Groups 1+2)
+            async { tokio::join!(make_facetime(path.clone(), &conn, &client), make_idms(&conn)) }
+        );
 
         Some((Self {
             os_config: config.clone(),
@@ -613,36 +675,11 @@ impl SharedPushState {
 
             anisette: anisette.clone(),
             conn: conn.clone(),
-            icloud_services: if let Some(account) = &account {
-                let token_provider = make_token_provider(account, config);
-                let cloudkit = make_cloudkit(path.clone(), &anisette, config, &token_provider).await.expect("todo remove");
-                let keychain = make_keychain(path.clone(), &cloudkit, &anisette, config, &token_provider);
-
-                Some(SharedICloudServices {
-                    account: account.clone(),
-                    token_provider: token_provider.clone(),
-
-                    cloudkit_client: Some(cloudkit.clone()),
-                    keychain: keychain.clone(),
-                    passwords: if let Some(keychain) = &keychain {
-                        Some(make_passwords(path.clone(), keychain, &cloudkit, &client, &conn).await)
-                    } else { None },
-                    profiles_client: make_profiles(&cloudkit).await,
-                    fmfd: if let Some(keychain) = &keychain {
-                        make_findmy(path.clone(), &token_provider, &conn, &cloudkit, &keychain, &anisette, config, &client).await
-                    } else { None },
-                    sharedstreams: make_shared_streams(path.clone(), &conn, &anisette, config, &token_provider).await,
-                    cloud_messages_client: if let Some(keychain) = &keychain {
-                        Some(make_cloud_messages_client(&cloudkit, &keychain))
-                    } else { None },
-                    statuskit_client: make_statuskit(path.clone(), &token_provider, &conn, config, &client).await,
-                })
-            } else { None },
-
-            ft_client: make_facetime(path.clone(), &conn, &client).await,
+            icloud_services,
+            ft_client,
             client,
-            idms_client: make_idms(&conn).await,
-            
+            idms_client,
+
             active_circle_sessions: make_circle_sessions(),
             client_session: make_client_session(None),
         }, watcher))
@@ -662,13 +699,13 @@ pub fn make_circle_sessions() -> Arc<Mutex<Vec<ActiveCircleSession>>> {
 
 pub async fn restore_account(path: String, anisette: &ArcAnisetteClient<DefaultAnisetteProvider>, config: &JoinedOSConfig, conn: &APSConnection) -> Option<Arc<Mutex<AppleAccount<DefaultAnisetteProvider>>>> {
     let dir = PathBuf::from_str(&path).unwrap();
-    
+
 
     let mut state = plist::from_file::<_, GSAConfig>(&dir.join("gsa.plist")).ok()?;
 
     let mut apple_account =
             AppleAccount::new_with_anisette(get_login_config(&dir, config, conn).await, anisette.clone()).expect("aacbf?");
-        
+
     apple_account.username = Some(state.username.clone());
     apple_account.hashed_password = state.get_password().ok();
 
@@ -687,7 +724,7 @@ pub fn make_token_provider(account: &Arc<Mutex<AppleAccount<DefaultAnisetteProvi
     TokenProvider::new(account.clone(), config.config())
 }
 
-pub async fn make_shared_streams(path: String, conn: &APSConnection, anisette: &ArcAnisetteClient<DefaultAnisetteProvider>, 
+pub async fn make_shared_streams(path: String, conn: &APSConnection, anisette: &ArcAnisetteClient<DefaultAnisetteProvider>,
         config: &JoinedOSConfig, token: &Arc<TokenProvider<DefaultAnisetteProvider>>) -> Option<SyncManager<DefaultAnisetteProvider, MyFilePackager>> {
     let dir = PathBuf::from_str(&path).unwrap();
 
@@ -1391,10 +1428,10 @@ pub async fn get_contacts_headers(path: String, state: &ArcAnisetteClient<Defaul
     // I know it's the wrong answer. Stop looking at me!
     let id_path = dir.join("sharedstreams.plist");
     let findmy_state: SharedStreamsState = plist::from_file(id_path)?;
-    
+
     let mut headers = state.lock().await.get_headers().await?.clone();
     headers.insert("X-Mme-Client-Info".to_string(), config.get_adi_mme_info("com.apple.AuthKit/1 (com.apple.AddressBookSourceSync/2695.500.71)", !headers["X-Mme-Client-Info"].contains("iPhone OS")));
-    
+
     headers.insert("X-APPLE-FAMILY-AUTH-TOKEN".to_string(), token_provider.get_gsa_token("com.apple.gs.icloud.family.auth").await.expect("no Family auth token?"));
     let mme_token = token_provider.get_mme_token("mmeAuthToken").await?;
     headers.insert("Authorization".to_string(), format!("X-MobileMe-AuthToken {}", base64_encode(format!("{}:{}", &findmy_state.dsid, mme_token).as_bytes())));
@@ -1491,7 +1528,7 @@ pub async fn ft_sessions(facetime: &Arc<FTClient>) -> anyhow::Result<Vec<FTSessi
 
 pub async fn get_ft_link(facetime: &Arc<FTClient>, usage: String) -> anyhow::Result<String> {
     let handles = facetime.identity.get_handles().await.to_vec();
-    
+
     let handle = handles[0].clone();
     Ok(facetime.get_link_for_usage(&handle, &usage).await?)
 }
@@ -2133,8 +2170,8 @@ pub struct QuotaInfo {
 pub async fn get_quota_info(info: &Arc<TokenProvider<DefaultAnisetteProvider>>) -> anyhow::Result<QuotaInfo> {
     let storage_info = info.get_storage_info().await?;
     Ok(QuotaInfo {
-        total_bytes: storage_info.storage_data.quota_info_in_bytes.total_quota, 
-        available_bytes: storage_info.storage_data.quota_info_in_bytes.total_available, 
+        total_bytes: storage_info.storage_data.quota_info_in_bytes.total_quota,
+        available_bytes: storage_info.storage_data.quota_info_in_bytes.total_available,
         messages_bytes: storage_info.storage_usage_by_media.iter().find(|m| &m.media_key == "messages").map(|m| m.usage_in_bytes).unwrap_or(0),
     })
 }
@@ -2172,11 +2209,11 @@ impl GSAConfig {
 
 pub async fn do_login(path: String, account: &Arc<Mutex<AppleAccount<DefaultAnisetteProvider>>>, finish: Option<UpdateAccountFinish>, os_config: &JoinedOSConfig) -> anyhow::Result<IDSUser> {
     let mut account = account.lock().await;
-    
+
     let conf_dir = PathBuf::from_str(&path).unwrap();
 
     account.update_postdata("Apple Device", None, &["icloud", "imessage", "facetime"]).await?;
-    
+
     let Some(pet) = account.get_pet() else { return Err(anyhow!("No pet!")) };
     let Some(spd) = &account.spd else { return Err(anyhow!("No spd!")) };
 
@@ -2184,14 +2221,14 @@ pub async fn do_login(path: String, account: &Arc<Mutex<AppleAccount<DefaultAnis
     let acname = spd.get("acname").ok_or(anyhow!("No acname!"))?.as_string().unwrap().to_string();
     let dsid = spd.get("DsPrsId").ok_or(anyhow!("No dsid!"))?.as_unsigned_integer().unwrap().to_string();
     let adsid = spd.get("adsid").ok_or(anyhow!("No adsid!"))?.as_string().unwrap();
-    
+
     let delegates = if let Some(finish) = finish {
         finish.accept_terms(&[LoginDelegate::IDS, LoginDelegate::MobileMe], &*account, &*os_config.config()).await?
     } else {
         login_apple_delegates(&*account, None, &*os_config.config(), &[LoginDelegate::IDS, LoginDelegate::MobileMe]).await?
     };
-    
-    
+
+
     plist::to_file_xml(conf_dir.join("gsa.plist"), &GSAConfig {
         username: account.username.clone().unwrap(),
         encrypted_password: GSAConfig::encrypt(&account.hashed_password.clone().unwrap())?,
@@ -2203,7 +2240,7 @@ pub async fn do_login(path: String, account: &Arc<Mutex<AppleAccount<DefaultAnis
         my_key: None,
         ..plist::from_file(&path).unwrap_or_default()
     }).unwrap()).unwrap();
-    
+
     let mobileme = delegates.mobileme.unwrap();
     let findmy = FindMyState::new(dsid.clone());
 
@@ -2216,7 +2253,7 @@ pub async fn do_login(path: String, account: &Arc<Mutex<AppleAccount<DefaultAnis
     if let Some(shared_streams) = shared_streams {
         let id_path = conf_dir.join("sharedstreams.plist");
         if !id_path.exists() {
-            std::fs::write(id_path, plist_to_string(&shared_streams).unwrap()).unwrap(); 
+            std::fs::write(id_path, plist_to_string(&shared_streams).unwrap()).unwrap();
         }
     } else {
         warn!("missing shared streams tokens!");
@@ -2259,7 +2296,7 @@ pub async fn try_auth(path: String, conf: &JoinedOSConfig, conn: &APSConnection,
     info!("Here");
     let mut apple_account =
         AppleAccount::new_with_anisette(get_login_config(&conf_dir, conf, conn).await, anisette.clone())?;
-    
+
     let result = if let Some((username, password)) = creds {
         reset_user(&path);
 
@@ -2277,7 +2314,7 @@ pub async fn try_auth(path: String, conf: &JoinedOSConfig, conn: &APSConnection,
     info!("Here3");
 
     let account = Arc::new(Mutex::new(apple_account));
-    
+
     info!("Here6");
     Ok((account, login_state))
 }
@@ -2288,7 +2325,7 @@ pub async fn try_icloud_login(path: String, conf: &JoinedOSConfig, account: &Arc
         info!("Here4");
         let identity = do_login(path, &account, None, conf).await?;
         info!("Here5");
-        
+
         Ok(Some(identity))
     } else {
         Ok(None)
@@ -2545,7 +2582,7 @@ pub async fn upload_cloud_attachments(cloud_messages_client: &Arc<CloudMessagesC
         hashes.push(prepared.total_sig.clone());
         to_upload.push((prepared, std::fs::File::open(file)?, record.clone()));
     }
-    
+
     let results = cloud_messages_client.upload_attachments(to_upload).await?;
 
     let mut finish = HashMap::new();
@@ -2566,7 +2603,7 @@ pub async fn upload_group_photo(cloud_messages_client: &Arc<CloudMessagesClient<
         hashes.push(prepared.total_sig.clone());
         to_upload.push((prepared, std::fs::File::open(file)?, record.clone()));
     }
-    
+
     let results = cloud_messages_client.upload_group_photo(to_upload).await?;
 
     let mut finish = HashMap::new();
