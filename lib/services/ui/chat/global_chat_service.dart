@@ -10,6 +10,7 @@ class _GlobalChatService extends GetxService {
   final RxInt _unreadCount = 0.obs;
   final Map<String, RxBool> _unreadCountMap = <String, RxBool>{}.obs;
   final Map<String, RxnString> _muteTypeMap = <String, RxnString>{}.obs;
+  final Map<String, Chat> _chatCache = <String, Chat>{};
 
   RxInt get unreadCount => _unreadCount;
 
@@ -43,16 +44,69 @@ class _GlobalChatService extends GetxService {
     final query = Database.chats.query().watch(triggerImmediately: true);
     query.listen((event) {
       final chats = event.find();
+      _onChatUpdate(chats);
+    });
+  }
 
-      // Detect changes and make updates
+  void _onChatUpdate(List<Chat> chats) {
+    // On first run, populate cache and process all chats
+    if (_chatCache.isEmpty) {
+      for (final chat in chats) {
+        _chatCache[chat.guid] = chat;
+      }
       _evaluateUnreadInfo(chats);
       _evaluateMuteInfo(chats);
-    });
+      return;
+    }
+
+    // Snapshot old keys FIRST to detect deletes before updating cache
+    final cachedGuids = _chatCache.keys.toSet();
+
+    // Find changed chats by comparing with cache
+    final changedChats = <Chat>[];
+    for (final chat in chats) {
+      final cached = _chatCache[chat.guid];
+      if (cached == null ||
+          (cached.hasUnreadMessage ?? false) != (chat.hasUnreadMessage ?? false) ||
+          cached.muteType != chat.muteType) {
+        changedChats.add(chat);
+      }
+    }
+
+    // Then update cache with fresh data
+    final freshMap = <String, Chat>{...chats.asMap().map((_, chat) => MapEntry(chat.guid, chat))};
+    _chatCache.clear();
+    _chatCache.addAll(freshMap);
+
+    // Now find deleted chats from snapshot and remove from Rx maps
+    final deleted = cachedGuids.difference(freshMap.keys.toSet());
+    for (final guid in deleted) {
+      _unreadCountMap.remove(guid);
+      _muteTypeMap.remove(guid);
+    }
+    
+    // Recalculate unread count after deletions
+    if (deleted.isNotEmpty) {
+      unreadCount.value = freshMap.values.where((c) => c.hasUnreadMessage ?? false).length;
+    }
+
+    // Only update changed chats
+    if (changedChats.isNotEmpty) {
+      _updateUnread(changedChats);
+      _updateMute(changedChats);
+    }
   }
 
   void _evaluateUnreadInfo(List<Chat> chats) {
     unreadCount.value = chats.where((element) => element.hasUnreadMessage ?? false).length;
+    _updateUnread(chats);
+  }
 
+  void _evaluateMuteInfo(List<Chat> chats) {
+    _updateMute(chats);
+  }
+
+  void _updateUnread(List<Chat> chats) {
     for (Chat chat in chats) {
       final RxBool? currentUnreadStatus = _unreadCountMap[chat.guid];
       
@@ -67,7 +121,7 @@ class _GlobalChatService extends GetxService {
     }
   }
 
-  void _evaluateMuteInfo(List<Chat> chats) {
+  void _updateMute(List<Chat> chats) {
     for (Chat chat in chats) {
       final Rx<String?>? currentMuteStatus = _muteTypeMap[chat.guid];
 
