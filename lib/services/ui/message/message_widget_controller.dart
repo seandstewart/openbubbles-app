@@ -49,11 +49,11 @@ class MessageWidgetController extends StatefulController with GetSingleTickerPro
   void onInit() {
     super.onInit();
     buildMessageParts();
-    if (!kIsWeb && message.id != null) {
-      print("listening ${message.id}");
-      final messageQuery = Database.messages.query(Message_.id.equals(message.id!)).watch();
-      sub = messageQuery.listen((Query<Message> query) async {
-        if (message.id == null) return;
+    if (!kIsWeb && message.id != null && cvController != null) {
+      // Subscribe to batch watcher stream from MessagesService (ADR-005)
+      final messagesService = ms(cvController!.chat.guid);
+      sub = messagesService.messageChangedStream.listen((changedMessageId) async {
+        if (message.id == null || changedMessageId != message.id) return;
         final _message = await runAsync(() {
           return Database.messages.get(message.id!);
         });
