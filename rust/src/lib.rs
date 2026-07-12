@@ -10,7 +10,11 @@ uniffi::setup_scaffolding!();
 pub static RUNTIME: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
     info!("creating runner");
     tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1)
+        .worker_threads(
+            std::thread::available_parallelism()
+                .map(|n| n.get().min(4))
+                .unwrap_or(2)
+        )
         .thread_name("tokio-rustpush")
         .enable_all()
         .build().unwrap()
@@ -35,7 +39,7 @@ pub fn init_logger(path: &Path) {
     };
 
     println!("here??");
-    
+
     let (logger, _) = Logger::try_with_str("debug").expect("No logger?")
         .log_to_file(FileSpec::default().directory(path.join("logs")).suppress_timestamp())
         .append()
@@ -44,7 +48,7 @@ pub fn init_logger(path: &Path) {
         .rotate(Criterion::AgeOrSize(Age::Day, 1024 * 1024 * 10 /* 10 MB */), Naming::Numbers, Cleanup::KeepLogFiles(1))
         .write_mode(WriteMode::BufferAndFlush)
         .build().unwrap();
-    
+
     multi_log::MultiLogger::init(vec![Box::new(system), logger], log::Level::Trace).expect("No init?");
 }
 
