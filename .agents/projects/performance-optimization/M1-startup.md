@@ -104,9 +104,9 @@ move |keys| {
 ```
 
 **Acceptance Criteria:**
-- [ ] No `std::fs::read` or `std::fs::write` inside async functions in `api.rs`
-- [ ] All file writes use `tokio::fs` or spawned onto blocking thread pool
-- [ ] File write errors logged, not panicked
+- [x] No `std::fs::read` or `std::fs::write` inside async functions in `api.rs`
+- [x] All file writes use `tokio::fs` or spawned onto blocking thread pool
+- [x] File write errors logged, not panicked
 
 ---
 

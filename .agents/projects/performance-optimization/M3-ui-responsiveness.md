@@ -223,8 +223,8 @@ for (int i = 0; i < _contacts.length; i += _avatarBatchSize) {
 3. On typing indicator events: do not modify or sort `_messages`.
 
 **Acceptance Criteria:**
-- [ ] Sort never called for typing indicator events
-- [ ] New messages inserted in O(log N)
+- [x] Sort never called for typing indicator events
+- [x] New messages inserted in O(log N)
 
 ---
 
@@ -259,8 +259,8 @@ void dispose() {
 ```
 
 **Acceptance Criteria:**
-- [ ] No stream subscriptions survive past `dispose()`
-- [ ] Memory profiler shows stable subscription count during scroll
+- [x] No stream subscriptions survive past `dispose()`
+- [x] Memory profiler shows stable subscription count during scroll
 
 ---
 

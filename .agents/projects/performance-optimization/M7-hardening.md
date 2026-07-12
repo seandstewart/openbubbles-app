@@ -29,8 +29,8 @@ if (msg.dateCreated != null &&
 ```
 
 **Acceptance Criteria:**
-- [ ] No null dereference in incremental sync timestamp tracking
-- [ ] Unit test added covering null `dateCreated` + non-null `lastSyncedTimestamp`
+- [x] No null dereference in incremental sync timestamp tracking
+- [x] Unit test added covering null `dateCreated` + non-null `lastSyncedTimestamp`
 
 ---
 
