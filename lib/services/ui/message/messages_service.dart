@@ -20,6 +20,7 @@ class MessagesService extends GetxController {
   static final Map<String, Size> cachedBubbleSizes = {};
   late Chat chat;
   late StreamSubscription countSub;
+  late StreamSubscription? messageWatcherSub;
   final ChatMessages struct = ChatMessages();
   late Function(Message) newFunc;
   late Function(Message, {String? oldGuid}) updateFunc;
@@ -33,6 +34,12 @@ class MessagesService extends GetxController {
   bool isFetching = false;
   bool _init = false;
   String? method;
+  
+  // Batch watcher state
+  late StreamController<int> _messageChangedStream;
+  final Map<String, Message> _lastSeenMessages = {};
+  
+  Stream<int> get messageChangedStream => _messageChangedStream.stream;
 
   Message? get mostRecentSent => (struct.messages.where((e) => e.isFromMe!).toList()
       ..sort(Message.sort)).firstOrNull;
@@ -54,6 +61,9 @@ class MessagesService extends GetxController {
 
     // watch for new messages
     if (!_init) {
+      // Initialize batch message watcher stream
+      _messageChangedStream = StreamController<int>.broadcast();
+      
       if (chat.id != null) {
         final countQuery = (Database.messages.query(Message_.dateDeleted.isNull())
           ..link(Message_.chat, Chat_.id.equals(chat.id!))
@@ -71,6 +81,8 @@ class MessagesService extends GetxController {
           }
           currentCount = newCount;
         });
+        // Initialize conversation-level message watcher for batch updates
+        _initMessageWatcher(chat.id!);
       } else if (kIsWeb) {
         countSub = WebListeners.newMessage.listen((tuple) {
           if (tuple.item2?.guid == chat.guid) {
@@ -86,6 +98,8 @@ class MessagesService extends GetxController {
   void onClose() {
     if (_init) {
       countSub.cancel();
+      messageWatcherSub?.cancel();
+      _messageChangedStream.close();
     }
     _init = false;
     super.onClose();
@@ -148,6 +162,44 @@ class MessagesService extends GetxController {
     struct.removeMessage(toRemove.guid!);
     struct.removeAttachments(toRemove.attachments.map((e) => e!.guid!));
     removeFunc.call(toRemove);
+  }
+
+  /// Initialize conversation-level message watcher for batch updates (ADR-005)
+  void _initMessageWatcher(int chatId) {
+    if (chatId <= 0) return;
+    if (!kIsWeb && messageWatcherSub == null) {
+      final messageQuery = Database.messages.query(Message_.chat.id.equals(chatId)).watch();
+      messageWatcherSub = messageQuery.listen((Query<Message> query) {
+        final messages = query.find();
+        _diffAndNotify(messages);
+      });
+    }
+  }
+
+  /// Diff updated messages against last seen state and emit changed message IDs
+  void _diffAndNotify(List<Message> updated) {
+    for (Message msg in updated) {
+      if (msg.guid == null) continue;
+      
+      final lastSeen = _lastSeenMessages[msg.guid!];
+      if (lastSeen == null) {
+        // New message, record it
+        _lastSeenMessages[msg.guid!] = msg;
+        continue;
+      }
+      
+      // Check if any tracked fields changed
+      final changed = lastSeen.dateRead != msg.dateRead ||
+          lastSeen.dateDelivered != msg.dateDelivered ||
+          lastSeen.dateEdited != msg.dateEdited ||
+          lastSeen.error != msg.error ||
+          lastSeen.didNotifyRecipient != msg.didNotifyRecipient;
+      
+      if (changed && msg.id != null) {
+        _lastSeenMessages[msg.guid!] = msg;
+        _messageChangedStream.add(msg.id!);
+      }
+    }
   }
 
   Future<bool> loadChunk(int offset, ConversationViewController controller, {int limit = 25}) async {
