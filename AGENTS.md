@@ -37,7 +37,7 @@ All agent resources are located in [`.agents/`](.agents/).
 
 | Project | Goal | Status |
 |---|---|---|
-| [Performance Optimization](.agents/projects/performance-optimization/README.md) | Eliminate bottlenecks for low-end Android devices | Proposed |
+| [Performance Optimization](.agents/projects/performance-optimization/README.md) | Eliminate bottlenecks for low-end Android devices | In Progress (Weeks 5–6 complete) |
 
 ## Architecture Decision Records
 
@@ -45,21 +45,21 @@ All ADRs are in [`.agents/adrs/`](.agents/adrs/). See [`.agents/rules/adr.md`](.
 
 | ADR | Decision | Status |
 |---|---|---|
-| [ADR-001](.agents/adrs/ADR-001-parallel-icloud-init.md) | Parallelize iCloud service initialization | Proposed |
-| [ADR-002](.agents/adrs/ADR-002-tokio-worker-threads.md) | Increase Tokio worker thread count | Proposed |
+| [ADR-001](.agents/adrs/ADR-001-parallel-icloud-init.md) | Parallelize iCloud service initialization | ✅ Implemented (M1.1) |
+| [ADR-002](.agents/adrs/ADR-002-tokio-worker-threads.md) | Increase Tokio worker thread count | Proposed (Week 5–6) |
 | [ADR-003](.agents/adrs/ADR-003-async-file-io.md) | Replace blocking file I/O with tokio::fs | Proposed |
 | [ADR-004](.agents/adrs/ADR-004-binary-plist.md) | Replace XML plist with binary plist | Proposed |
-| [ADR-005](.agents/adrs/ADR-005-batch-message-watcher.md) | Batch message ObjectBox watcher | Proposed |
-| [ADR-006](.agents/adrs/ADR-006-globalchatservice-delta.md) | GlobalChatService delta-based updates | Proposed |
-| [ADR-007](.agents/adrs/ADR-007-contact-phone-index.md) | Contact phone number index | Proposed |
-| [ADR-008](.agents/adrs/ADR-008-lru-image-cache.md) | LRU eviction for image cache | Proposed |
+| [ADR-005](.agents/adrs/ADR-005-batch-message-watcher.md) | Batch message ObjectBox watcher | ✅ Implemented (M3.1) |
+| [ADR-006](.agents/adrs/ADR-006-globalchatservice-delta.md) | GlobalChatService delta-based updates | ✅ Implemented (M3.2) |
+| [ADR-007](.agents/adrs/ADR-007-contact-phone-index.md) | Contact phone number index | ✅ Implemented (M3.3) |
+| [ADR-008](.agents/adrs/ADR-008-lru-image-cache.md) | LRU eviction for image cache | ✅ Implemented (M4.1) |
 | [ADR-009](.agents/adrs/ADR-009-dpoll-backoff.md) | Exponential backoff in doPoll() | Proposed |
 | [ADR-010](.agents/adrs/ADR-010-parallel-handler-dispatch.md) | Parallel handler dispatch in recv_wait | Proposed |
 | [ADR-011](.agents/adrs/ADR-011-retry-task-cancellation.md) | Cancel retry tasks on message ACK | Proposed |
-| [ADR-012](.agents/adrs/ADR-012-parallel-avatar-loading.md) | Parallel contact avatar loading | Proposed |
-| [ADR-013](.agents/adrs/ADR-013-mlkit-off-build-path.md) | ML Kit off widget build path | Proposed |
-| [ADR-014](.agents/adrs/ADR-014-chunked-cloudkit-erase.md) | Chunked CloudKit sync erasure | Proposed |
-| [ADR-015](.agents/adrs/ADR-015-avatar-file-uri.md) | Notification avatars by file URI | Proposed |
-| [ADR-016](.agents/adrs/ADR-016-parallel-sync.md) | Concurrent chat and handle sync | Proposed |
+| [ADR-012](.agents/adrs/ADR-012-parallel-avatar-loading.md) | Parallel contact avatar loading | ✅ Implemented (M3.4) |
+| [ADR-013](.agents/adrs/ADR-013-mlkit-off-build-path.md) | ML Kit off widget build path | Proposed (Week 7) |
+| [ADR-014](.agents/adrs/ADR-014-chunked-cloudkit-erase.md) | Chunked CloudKit sync erasure | ✅ Implemented (M4.2) |
+| [ADR-015](.agents/adrs/ADR-015-avatar-file-uri.md) | Notification avatars by file URI | Proposed (Week 7) |
+| [ADR-016](.agents/adrs/ADR-016-parallel-sync.md) | Concurrent chat and handle sync | In Progress (M6.5 ✅) |
 | [ADR-017](.agents/adrs/ADR-017-db-transactions.md) | Explicit ObjectBox write transactions | Proposed |
 | [ADR-018](.agents/adrs/ADR-018-desktop-key-security.md) | Platform keychain for desktop encryption | Proposed |
