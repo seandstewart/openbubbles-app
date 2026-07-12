@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' show min;
 
 import 'package:bluebubbles/helpers/helpers.dart';
 import 'package:bluebubbles/database/database.dart';
@@ -23,6 +24,12 @@ class ContactsService extends GetxService {
   /// The master list of contact objects
   List<Contact> contacts = [];
 
+  /// Index of phone numbers (digit-normalized) to contacts for O(1) lookup
+  Map<String, Contact> _phoneIndex = {};
+
+  /// Index of email addresses (lowercase) to contacts for O(1) lookup
+  Map<String, Contact> _emailIndex = {};
+
   bool _hasContactAccess = false;
 
   Future<bool> get hasContactAccess async {
@@ -38,8 +45,10 @@ class ContactsService extends GetxService {
 
     if (!kIsWeb) {
       contacts = Contact.getContacts();
+      _rebuildIndices();
     } else {
       await fetchNetworkContacts();
+      _rebuildIndices();
     }
   }
 
@@ -136,6 +145,7 @@ class ContactsService extends GetxService {
       // dummy to make the full contacts UI refresh happen on web
       changedIds.last.add(handles.length);
       contacts = _contacts;
+      _rebuildIndices();
       for (Chat c in chats.chats) {
         c.webSyncParticipants();
       }
@@ -178,10 +188,14 @@ class ContactsService extends GetxService {
       int endTime = DateTime.now().millisecondsSinceEpoch;
       Logger.debug("Contacts fetched in ${endTime - startTime} ms");
 
-      // get avatars
+      // get avatars in parallel batches to avoid memory spike
       startTime = DateTime.now().millisecondsSinceEpoch;
-      for (Contact c in _contacts) {
-        c.avatar = await getContactAvatar(c.id);
+      const _avatarBatchSize = 20;
+      for (int i = 0; i < _contacts.length; i += _avatarBatchSize) {
+        final batch = _contacts.sublist(i, min(i + _avatarBatchSize, _contacts.length));
+        await Future.wait(batch.map((c) async {
+          c.avatar = await getContactAvatar(c.id);
+        }));
       }
 
       endTime = DateTime.now().millisecondsSinceEpoch;
@@ -214,8 +228,30 @@ class ContactsService extends GetxService {
   void completeContactsRefresh(List<Contact> refreshedContacts, {List<List<int>>? reloadUI}) {
     if (refreshedContacts.isNotEmpty) {
       contacts = refreshedContacts;
+      _rebuildIndices();
       if (reloadUI != null) {
         eventDispatcher.emit('update-contacts', reloadUI);
+      }
+    }
+  }
+
+  /// Rebuilds the phone and email indices from the current contacts list.
+  /// Called whenever contacts are refreshed to maintain O(1) lookup performance.
+  void _rebuildIndices() {
+    _phoneIndex.clear();
+    _emailIndex.clear();
+
+    for (Contact c in contacts) {
+      // Index all phone numbers
+      for (String phone in c.phones) {
+        final normalized = phone.numericOnly();
+        _phoneIndex[normalized] = c;
+      }
+
+      // Index all email addresses (case-insensitive)
+      for (String email in c.emails) {
+        final normalized = email.toLowerCase();
+        _emailIndex[normalized] = c;
       }
     }
   }
@@ -260,31 +296,32 @@ class ContactsService extends GetxService {
   Contact? matchHandleToContact(Handle h) {
     if (!_hasContactAccess) return null;
 
-    Contact? contact;
+    // Fast path: exact email match (case-insensitive)
+    if (h.address.contains("@")) {
+      final normalizedEmail = h.address.toLowerCase();
+      if (_emailIndex.containsKey(normalizedEmail)) {
+        return _emailIndex[normalizedEmail];
+      }
+      return null;
+    }
+
+    // Fast path: exact phone match
     final numericAddress = h.address.numericOnly();
+    if (_phoneIndex.containsKey(numericAddress)) {
+      return _phoneIndex[numericAddress];
+    }
+
+    // Slow path: try to match last 7-15 digits against all normalized phone numbers
     for (Contact c in contacts) {
       final numericPhones = c.phones.map((e) => e.numericOnly()).toList();
-      if (h.address.contains("@") && c.emails.contains(h.address)) {
-        contact = c;
-        break;
-      } else {
-        // if address is direct match
-        if (c.phones.contains(numericAddress)) {
-          contact = c;
-          break;
+      for (String p in numericPhones) {
+        final matchLengths = [15, 14, 13, 12, 11, 10, 9, 8, 7];
+        if (matchLengths.contains(p.length) && numericAddress.endsWith(p)) {
+          return c;
         }
-        // try to match last 11 - 7 digits
-        for (String p in numericPhones) {
-          final matchLengths = [15, 14, 13, 12, 11, 10, 9, 8, 7];
-          if (matchLengths.contains(p.length) && numericAddress.endsWith(p)) {
-            contact = c;
-            break;
-          }
-        }
-        if (contact != null) break;
       }
     }
-    return contact;
+    return null;
   }
 
   Contact? getContact(String address) {
