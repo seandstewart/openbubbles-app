@@ -65,9 +65,9 @@
 Cap at 4 to avoid over-subscribing low-end CPUs.
 
 **Acceptance Criteria:**
-- [ ] Multiple iCloud service handlers run concurrently
-- [ ] No single slow handler blocks iMessage delivery
-- [ ] CPU core count respected (capped at 4)
+- [x] Multiple iCloud service handlers run concurrently
+- [x] No single slow handler blocks iMessage delivery
+- [x] CPU core count respected (capped at 4)
 
 ---
 

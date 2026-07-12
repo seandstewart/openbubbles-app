@@ -37,9 +37,9 @@ Future<void> doPoll() async {
 ```
 
 **Acceptance Criteria:**
-- [ ] CPU does not spike during APNs connection errors
-- [ ] Reconnect backoff caps at 30 seconds
-- [ ] Errors logged with stack trace
+- [x] CPU does not spike during APNs connection errors
+- [x] Reconnect backoff caps at 30 seconds
+- [x] Errors logged with stack trace
 
 ---
 
@@ -171,6 +171,6 @@ fun tryReconnect() {
 Where `scope` is existing `CoroutineScope(Dispatchers.IO + SupervisorJob())`.
 
 **Acceptance Criteria:**
-- [ ] `SocketIOForegroundService` never blocks main thread
-- [ ] Reconnect still occurs after 30 seconds
-- [ ] No ANR in reconnect path on any Android version
+- [x] `SocketIOForegroundService` never blocks main thread
+- [x] Reconnect still occurs after 30 seconds
+- [x] No ANR in reconnect path on any Android version
