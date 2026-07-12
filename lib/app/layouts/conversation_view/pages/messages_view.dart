@@ -314,9 +314,17 @@ class MessagesViewState extends OptimizedState<MessagesView> {
   }
 
   void handleNewMessage(Message message) async {
-    _messages.add(message);
-    _messages.sort(Message.sort);
-    final insertIndex = _messages.indexOf(message);
+    int lo = 0, hi = _messages.length;
+    while (lo < hi) {
+      final mid = (lo + hi) ~/ 2;
+      if (Message.sort(_messages[mid], message) <= 0) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    _messages.insert(lo, message);
+    final insertIndex = lo;
     _syncBottomMessageFocusNode();
 
     if (listKey.currentState != null) {
@@ -361,8 +369,11 @@ class MessagesViewState extends OptimizedState<MessagesView> {
           messageFocusNodes[message.guid!] = node;
         }
       }
+      final old = _messages[index];
       _messages[index] = message;
-      _messages.sort(Message.sort);
+      if (old.dateCreated != message.dateCreated) {
+        _messages.sort(Message.sort);
+      }
       _syncBottomMessageFocusNode();
     }
     if (message.wasDeliveredQuietly != latestMessageDeliveredState.value) {
