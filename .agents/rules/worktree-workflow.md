@@ -51,13 +51,29 @@ Then open the worktree path in Zed as a new project window.
 
 ## Committing Inside a Worktree
 
-Follow standard commit conventions (Conventional Commits). Reference milestone task IDs in commit body when applicable:
+**One branch per task. One commit per task.** Never batch multiple tasks into one branch.
+
+Branch naming: `project/<slug>-<task-id>` (e.g. `project/perf-m12`).
+
+Task branches contain only the code files changed by that task — no `.agents/` doc updates.
 
 ```
-feat(perf): batch ObjectBox message watcher
+perf(rust): increase Tokio worker thread count
 
-Task 1.2 — reduces watcher callback overhead on low-end devices.
+Task M1.2 — replaces worker_threads(1) with available_parallelism().min(4).
 ```
+
+## Project Docs Branch
+
+A long-lived docs branch (e.g. `project/agent-docs`) tracks all `.agents/` project files. After committing task branches, check off acceptance criteria on the docs branch by pulling the updated milestone files from each task branch:
+
+```bash
+git checkout project/agent-docs
+git checkout project/perf-m12 -- .agents/projects/performance-optimization/M1-startup.md
+git commit -m "docs(perf): mark M1.2 acceptance criteria complete"
+```
+
+Never commit task code to the docs branch. Never commit `.agents/` updates to a task branch.
 
 ## Merging Back to Mainline
 

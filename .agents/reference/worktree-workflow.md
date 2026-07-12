@@ -40,11 +40,49 @@ git worktree add ~/projects/worktrees/openbubbles-app/<slug>/openbubbles-app \
 
 Open the new worktree path as a project in Zed.
 
-### 3. Implement by Milestone
+### 3. Implement Task by Task
 
-Work milestone-by-milestone. After each task:
-- Check off acceptance criteria in the milestone file
-- Commit with a message referencing the task ID
+Each task gets **one branch and one commit**. The project docs branch tracks status separately.
+
+#### Task branch pattern
+
+```bash
+# Create task branch from rustpush
+git checkout -b project/perf-m12 rustpush
+
+# Apply only the files changed by this task
+git add rust/src/lib.rs
+git commit -m "perf(rust): increase Tokio worker thread count
+
+Task M1.2 — ..."
+```
+
+Branch naming: `project/<slug>-<task-id>` (e.g. `project/perf-m12`, `project/perf-m25`).
+
+#### Docs branch pattern
+
+The project docs branch (e.g. `project/agent-docs`) is the long-lived branch for `.agents/` files. After committing task branches, update milestone status here:
+
+```bash
+git checkout project/agent-docs
+
+# Pull updated milestone files from task branches
+git checkout project/perf-m12 -- .agents/projects/performance-optimization/M1-startup.md
+git checkout project/perf-m25 -- .agents/projects/performance-optimization/M2-message-delivery.md
+
+git commit -m "docs(perf): mark M1.2, M2.5 acceptance criteria complete
+
+Tasks committed to dedicated branches:
+- project/perf-m12: Tokio worker threads (M1.2)
+- project/perf-m25: SocketIOForegroundService ANR fix (M2.5)"
+```
+
+#### Rules
+
+- Never mix task code and `.agents/` doc updates in the same commit
+- Never commit task code directly to the docs branch
+- Milestone file changes (checkbox updates) belong on the docs branch only
+- One task branch per task — do not batch multiple tasks into one branch
 
 ### 4. Validate
 
