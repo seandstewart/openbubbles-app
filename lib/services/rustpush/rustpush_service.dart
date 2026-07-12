@@ -4504,10 +4504,13 @@ class RustPushService extends GetxService {
     }
   }
 
+  int _backoffMs = 100;
+
   void doPoll(api.ApsWatcher watcher, lib.ArcSharedPushState sharedPushState) async {
     while (true) {
       try {
         var msgRaw = await api.recvWait(state: sharedPushState, watcher: watcher);
+        _backoffMs = 100;
         if (msgRaw is api.PollResult_Stop) {
           break;
         }
@@ -4525,6 +4528,8 @@ class RustPushService extends GetxService {
         // if there was an error somewhere, log it and move on.
         // don't stop our loop
         Logger.error("$e: $t");
+        await Future.delayed(Duration(milliseconds: _backoffMs));
+        _backoffMs = (_backoffMs * 2).clamp(100, 30000);
       }
     }
     watcher.dispose();
