@@ -22,17 +22,24 @@ class DeliveredIndicator extends CustomStateful<MessageWidgetController> {
 class _DeliveredIndicatorState extends CustomState<DeliveredIndicator, void, MessageWidgetController> {
   Message get message => controller.message;
   bool get showAvatar => (controller.cvController?.chat ?? cm.activeChat!.chat).isGroup;
+  late StreamSubscription _eventSubscription;
 
   @override
   void initState() {
     forceDelete = false;
     super.initState();
 
-    eventDispatcher.stream.listen((event) {
+    _eventSubscription = eventDispatcher.stream.listen((event) {
       if (event.item1 == "message-updated-${message.guid}") {
         setState(() {});
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _eventSubscription.cancel();
+    super.dispose();
   }
 
   bool get shouldShow {

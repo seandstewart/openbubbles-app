@@ -99,20 +99,44 @@ class HandleSyncManager extends SyncManager {
 
         addToOutput('Saving chunk of ${serverHandles.length} handles(s)...');
 
-        // Generate the formatted address for each.
+        // Generate the formatted address for each (batched parallelization).
         // And load the matching contact, if we can.
-        for (Handle h in serverHandles) {
-          // restore preferences from backed up handle
-          final backedUpHandle = handleBackup[h.originalROWID!];
-          h.color = backedUpHandle?.color;
-          h.defaultEmail = backedUpHandle?.defaultEmail;
-          h.defaultPhone = backedUpHandle?.defaultPhone;
-          if (!h.address.contains("@") && h.formattedAddress == null) {
-            h.formattedAddress = await formatPhoneNumber(h.address);
-          }
+        const int batchSize = 50;
+        for (int batchStart = 0; batchStart < serverHandles.length; batchStart += batchSize) {
+          if (batchStart >= serverHandles.length) break;
+          
+          final batchEnd = (batchStart + batchSize).clamp(0, serverHandles.length);
+          final batch = serverHandles.sublist(batchStart, batchEnd);
 
+          // Restore preferences and format phone numbers in parallel
+          final phoneFormatFutures = <Future<void>>[];
+          
+          for (Handle h in batch) {
+            // restore preferences from backed up handle
+            final backedUpHandle = handleBackup[h.originalROWID!];
+            h.color = backedUpHandle?.color;
+            h.defaultEmail = backedUpHandle?.defaultEmail;
+            h.defaultPhone = backedUpHandle?.defaultPhone;
+            
+            if (!h.address.contains("@") && h.formattedAddress == null) {
+              phoneFormatFutures.add(
+                formatPhoneNumber(h.address).then((formatted) {
+                  h.formattedAddress = formatted;
+                })
+              );
+            }
+          }
+          
+          // Wait for all phone formatting in batch to complete
+          if (phoneFormatFutures.isNotEmpty) {
+            await Future.wait(phoneFormatFutures);
+          }
+          
+          // Sync contact matching (O(1) per handle, no Future wrapper)
           if (hasContactAccess) {
-            h.contactRelation.target ??= cs.matchHandleToContact(h);
+            for (Handle h in batch) {
+              h.contactRelation.target ??= cs.matchHandleToContact(h);
+            }
           }
         }
 
