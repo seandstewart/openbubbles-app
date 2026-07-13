@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:async_task/async_task_extension.dart';
 import 'package:bluebubbles/utils/logger/logger.dart';
 import 'package:bluebubbles/helpers/helpers.dart';
@@ -24,8 +26,96 @@ class FullSyncManager extends SyncManager {
 
   bool skipEmptyChats;
 
-  FullSyncManager({int? endTimestamp, this.messageCount = 25, this.skipEmptyChats = true, bool saveLogs = false})
-      : super("Full", saveLogs: saveLogs);
+  Future<(int, int)> _syncChatMessages(
+    Chat chat,
+    int prevDeletedCount,
+    int prevCompletedCount,
+    int? totalChats,
+    List<Chat> newChats,
+    bool isDesktop,
+  ) async {
+    int messageCount = 0;
+    int deletedCount = 0;
+
+    try {
+      await for (final messageEvent in streamChatMessages(
+        chat.guid,
+        this.messageCount,
+        batchSize: this.messageCount,
+      )) {
+        List<Message> newMessages = messageEvent.item2;
+        String? displayName = chat.guid;
+        if (chat.displayName != null && chat.displayName!.isNotEmpty) {
+          displayName = chat.displayName;
+        } else if (displayName.contains(';-;')) {
+          String addr = displayName.split(';-;')[1];
+          Contact? contact = cs.getContact(addr);
+          if (contact != null) {
+            displayName = contact.displayName;
+          } else if (!addr.contains("@")) {
+            displayName = await formatPhoneNumber(addr);
+          } else {
+            displayName = addr;
+          }
+        }
+
+        if (chat.participants.isEmpty) {
+          addToOutput(
+            'Deleting chat: $displayName (no participants were found)',
+          );
+          Chat.softDelete(chat);
+          deletedCount++;
+          continue;
+        }
+        if (newMessages.isEmpty && skipEmptyChats) {
+          addToOutput(
+            'Deleting chat: $displayName (skip empty chats was selected)',
+          );
+          Chat.softDelete(chat);
+          deletedCount++;
+          continue;
+        }
+
+        addToOutput(
+          'Saving chunk of ${newMessages.length} message(s) for chat: $displayName',
+        );
+
+        // Save messages
+        List<Message> insertedMessages = await Message.bulkSaveNewMessages(
+          chat,
+          newMessages,
+        );
+        messageCount += insertedMessages.length;
+
+        // If we're supposed to be stopping, break out
+        if (status.value == SyncStatus.STOPPING) break;
+      }
+    } catch (ex, stack) {
+      addToOutput(
+        'Failed to sync chat messages! Error: ${ex.toString()}',
+        level: LogLevel.ERROR,
+      );
+      Logger.debug("StackTrace: $stack", tag: tag);
+      Logger.debug('Error: ${ex.toString()}', tag: tag);
+    }
+
+    return (messageCount, deletedCount);
+  }
+
+  FullSyncManager({
+    int? endTimestamp,
+    this.messageCount = 25,
+    this.skipEmptyChats = true,
+    bool saveLogs = false,
+  }) : super("Full", saveLogs: saveLogs) {
+    // Store endTimestamp if provided
+    if (endTimestamp != null) {
+      this.endTimestamp = endTimestamp;
+    }
+  }
+
+  // Helper to compute min(a, b)
+  int min(int a, int b) => a < b ? a : b;
 
   @override
   Future<void> start() async {
@@ -78,96 +168,101 @@ class FullSyncManager extends SyncManager {
         int deletedChats = 0;
 
         // 2: For each chat, get the messages.
-        // We will stream the messages by page
-        for (final chat in chats) {
-          if (kIsWeb || (chat.chatIdentifier ?? "").startsWith("urn:biz")) continue;
-          try {
-            await for (final messageEvent in streamChatMessages(chat.guid, messageCount, batchSize: messageCount)) {
-              List<Message> newMessages = messageEvent.item2;
-              String? displayName = chat.guid;
-              if (chat.displayName != null && chat.displayName!.isNotEmpty) {
-                displayName = chat.displayName;
-              } else if (displayName.contains(';-;')) {
-                String addr = displayName.split(';-;')[1];
-                Contact? contact = cs.getContact(addr);
-                if (contact != null) {
-                  displayName = contact.displayName;
-                } else if (!addr.contains("@")) {
-                  displayName = await formatPhoneNumber(addr);
-                } else {
-                  displayName = addr;
-                }
-              }
+        // Parallelize with bounded concurrency (5 chats at a time)
+        const maxConcurrency = 5;
+        final filteredChats = chats
+            .where(
+              (c) =>
+                  !(kIsWeb || (c.chatIdentifier ?? "").startsWith("urn:biz")),
+            )
+            .toList();
 
-              if (chat.participants.isEmpty) {
-                addToOutput('Deleting chat: $displayName (no participants were found)');
-                Chat.softDelete(chat);
-                deletedChats++;
-                continue;
-              }
-              if (newMessages.isEmpty && skipEmptyChats) {
-                addToOutput('Deleting chat: $displayName (skip empty chats was selected)');
-                Chat.softDelete(chat);
-                deletedChats++;
-                continue;
-              }
-
-              addToOutput('Saving chunk of ${newMessages.length} message(s) for chat: $displayName');
-
-              // Asyncronously save the messages
-              List<Message> insertedMessages = await Message.bulkSaveNewMessages(chat, newMessages);
-              messagesSynced += insertedMessages.length;
-
-              // Increment how many chats we've synced, then set the progress
-              completedChats += 1;
-              setProgress(completedChats, (totalChats ?? newChats.length) - deletedChats);
-              chatsSynced += 1;
-              if (kIsDesktop && Platform.isWindows) {
-                await WindowsTaskbar.setProgress(completedChats, (totalChats ?? newChats.length) - deletedChats);
-              }
-              // If we're supposed to be stopping, break out
-              if (status.value == SyncStatus.STOPPING) break;
-            }
-          } catch (ex, stack) {
-            addToOutput('Failed to sync chat messages! Error: ${ex.toString()}', level: LogLevel.ERROR);
-            Logger.debug("StackTrace: $stack", tag: tag);
-            Logger.debug('Error: ${ex.toString()}', tag: tag);
-          }
-
-          // If we're supposed to be stopping, break out
+        for (int i = 0; i < filteredChats.length; i += maxConcurrency) {
           if (status.value == SyncStatus.STOPPING) break;
+
+          final batch = filteredChats.sublist(
+            i,
+            min(i + maxConcurrency, filteredChats.length),
+          );
+          final futures = batch
+              .map(
+                (chat) => _syncChatMessages(
+                  chat,
+                  deletedChats,
+                  completedChats,
+                  totalChats,
+                  newChats,
+                  kIsDesktop,
+                ),
+              )
+              .toList();
+
+          final results = await Future.wait(futures);
+          for (final (msgs, deleted) in results) {
+            messagesSynced += msgs;
+            deletedChats += deleted;
+            completedChats += 1;
+            setProgress(
+              completedChats,
+              (totalChats ?? newChats.length) - deletedChats,
+            );
+            chatsSynced += 1;
+            if (kIsDesktop && Platform.isWindows) {
+              await WindowsTaskbar.setProgress(
+                completedChats,
+                (totalChats ?? newChats.length) - deletedChats,
+              );
+            }
+          }
         }
 
         if (chatProgress >= 1.0) {
           // When we've hit the last chunk, we're finished
           await complete();
           if (kIsDesktop && Platform.isWindows) {
-            await WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
-            await WindowsTaskbar.setFlashTaskbarAppIcon(mode: TaskbarFlashMode.timernofg);
+            await WindowsTaskbar.setProgressMode(
+              TaskbarProgressMode.noProgress,
+            );
+            await WindowsTaskbar.setFlashTaskbarAppIcon(
+              mode: TaskbarFlashMode.timernofg,
+            );
           }
         } else if (status.value == SyncStatus.STOPPING) {
           // If we are supposed to be stopping, complete the future
-          if (completer != null && !completer!.isCompleted) completer!.complete();
+          if (completer != null && !completer!.isCompleted)
+            completer!.complete();
           if (kIsDesktop && Platform.isWindows) {
-            await WindowsTaskbar.setProgressMode(TaskbarProgressMode.noProgress);
-            await WindowsTaskbar.setFlashTaskbarAppIcon(mode: TaskbarFlashMode.timernofg);
+            await WindowsTaskbar.setProgressMode(
+              TaskbarProgressMode.noProgress,
+            );
+            await WindowsTaskbar.setFlashTaskbarAppIcon(
+              mode: TaskbarFlashMode.timernofg,
+            );
           }
         }
       }
     } catch (e, s) {
-      addToOutput('Failed to sync chats! Error: ${e.toString()}', level: LogLevel.ERROR);
+      addToOutput(
+        'Failed to sync chats! Error: ${e.toString()}',
+        level: LogLevel.ERROR,
+      );
       addToOutput(s.toString(), level: LogLevel.ERROR);
       completeWithError(e.toString());
       if (kIsDesktop && Platform.isWindows) {
         await WindowsTaskbar.setProgressMode(TaskbarProgressMode.error);
-        await WindowsTaskbar.setFlashTaskbarAppIcon(mode: TaskbarFlashMode.timernofg);
+        await WindowsTaskbar.setFlashTaskbarAppIcon(
+          mode: TaskbarFlashMode.timernofg,
+        );
       }
     }
 
     return completer!.future;
   }
 
-  Stream<Tuple2<double, List<Chat>>> streamChatPages(int? count, {int batchSize = 200}) async* {
+  Stream<Tuple2<double, List<Chat>>> streamChatPages(
+    int? count, {
+    int batchSize = 200,
+  }) async* {
     // Set some default sync values
     int batches = 1;
     int countPerBatch = batchSize;
@@ -182,11 +277,16 @@ class FullSyncManager extends SyncManager {
     for (int i = 0; i < batches; i++) {
       // Fetch the chats and throw an error if we don't get back a good response.
       // Throwing an error should cancel the sync
-      Response chatPage = await http.chats(offset: i * countPerBatch, limit: countPerBatch, sort: kIsWeb ? "lastmessage" : null);
+      Response chatPage = await http.chats(
+        offset: i * countPerBatch,
+        limit: countPerBatch,
+        sort: kIsWeb ? "lastmessage" : null,
+      );
       dynamic data = chatPage.data;
       if (chatPage.statusCode != 200) {
         throw ChatRequestException(
-            '${data["error"]?["type"] ?? "API_ERROR"}: data["message"] ?? data["error"]["message"]}');
+          '${data["error"]?["type"] ?? "API_ERROR"}: data["message"] ?? data["error"]["message"]}',
+        );
       }
 
       // Convert the returned chat dictionaries to a list of Chat Objects
@@ -196,7 +296,11 @@ class FullSyncManager extends SyncManager {
     }
   }
 
-  Stream<Tuple2<double, List<Message>>> streamChatMessages(String chatGuid, int? count, {int batchSize = 25}) async* {
+  Stream<Tuple2<double, List<Message>>> streamChatMessages(
+    String chatGuid,
+    int? count, {
+    int batchSize = 25,
+  }) async* {
     // Set some default sync values
     int batches = 1;
     int countPerBatch = batchSize;
@@ -211,17 +315,27 @@ class FullSyncManager extends SyncManager {
     for (int i = 0; i < batches; i++) {
       // Fetch the messages and throw an error if we don't get back a good response.
       // Throwing an error should _not_ cancel the sync
-      Response messagePage = await http.chatMessages(chatGuid,
-          after: 0, before: endTimestamp, offset: i * countPerBatch, limit: countPerBatch, withQuery: "attachments,message.attributedBody,message.messageSummaryInfo,message.payloadData");
+      Response messagePage = await http.chatMessages(
+        chatGuid,
+        after: 0,
+        before: endTimestamp,
+        offset: i * countPerBatch,
+        limit: countPerBatch,
+        withQuery:
+            "attachments,message.attributedBody,message.messageSummaryInfo,message.payloadData",
+      );
       dynamic data = messagePage.data;
       if (messagePage.statusCode != 200) {
         throw MessageRequestException(
-            '${data["error"]?["type"] ?? "API_ERROR"}: data["message"] ?? data["error"]["message"]}');
+          '${data["error"]?["type"] ?? "API_ERROR"}: data["message"] ?? data["error"]["message"]}',
+        );
       }
 
       // Convert the returned chat dictionaries to a list of Chat Objects
       List<dynamic> messageResponse = data["data"];
-      List<Message> messages = messageResponse.map((e) => Message.fromMap(e)).toList();
+      List<Message> messages = messageResponse
+          .map((e) => Message.fromMap(e))
+          .toList();
       yield Tuple2<double, List<Message>>((i + 1) / batches, messages);
     }
   }
