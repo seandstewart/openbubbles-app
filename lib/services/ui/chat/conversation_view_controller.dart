@@ -38,7 +38,7 @@ class ConversationViewController extends StatefulController with GetSingleTicker
   }
 
   // caching items
-  final Map<String, Uint8List> imageData = {};
+  late final _LruImageCache imageData = _LruImageCache(maxSizeBytes: 200 * 1024 * 1024);
   final List<Tuple4<Attachment, PlatformFile, BuildContext, Completer<Uint8List>>> imageCacheQueue = [];
   final Map<String, Map<String, (Uint8List, StickerData?)>> stickerData = {};
   final Map<String, Metadata> legacyUrlPreviews = {};
@@ -300,7 +300,10 @@ class ConversationViewController extends StatefulController with GetSingleTicker
       queued.item4.complete(Uint8List.fromList([]));
       return;
     }
-    imageData[attachment.guid!] = tmpData;
+    final evicted = imageData.put(attachment.guid!, tmpData);
+    if (evicted != null) {
+      debugPrint('[ImageCache] Evicted ${attachment.guid} due to LRU policy');
+    }
     try {
       await precacheImage(MemoryImage(tmpData), queued.item3);
     } catch (_) {}
@@ -343,4 +346,82 @@ class ConversationViewController extends StatefulController with GetSingleTicker
       }
     }
   }
+}
+
+/// LRU image cache with maximum byte size limit.
+/// When max capacity is reached, evicts least-recently-used items.
+class _LruImageCache {
+  final int maxSizeBytes;
+  int _currentSizeBytes = 0;
+  final Map<String, Uint8List> _cache = {};
+  final List<String> _accessOrder = [];
+
+  _LruImageCache({required this.maxSizeBytes});
+
+  /// Put an image in the cache. Returns evicted data if any item was removed.
+  Uint8List? put(String key, Uint8List data) {
+    Uint8List? evicted;
+
+    // Remove if already exists to avoid double-counting
+    if (_cache.containsKey(key)) {
+      _currentSizeBytes -= _cache[key]!.length;
+      _cache.remove(key);
+      _accessOrder.remove(key);
+    }
+
+    // Add the new item
+    _cache[key] = data;
+    _currentSizeBytes += data.length;
+    _accessOrder.add(key);
+
+    // Evict LRU items until we're under the limit
+    while (_currentSizeBytes > maxSizeBytes && _cache.isNotEmpty) {
+      final lruKey = _accessOrder.removeAt(0);
+      final lruData = _cache.remove(lruKey);
+      if (lruData != null) {
+        _currentSizeBytes -= lruData.length;
+        evicted = lruData;
+      }
+    }
+
+    return evicted;
+  }
+
+  /// Get an image from the cache (marks as recently used).
+  Uint8List? operator [](String key) {
+    if (!_cache.containsKey(key)) return null;
+    // Mark as recently used
+    _accessOrder.remove(key);
+    _accessOrder.add(key);
+    return _cache[key];
+  }
+
+  /// Check if a key exists in the cache.
+  bool containsKey(String key) => _cache.containsKey(key);
+
+  /// Remove a specific image from the cache.
+  Uint8List? remove(String key) {
+    _accessOrder.remove(key);
+    final data = _cache.remove(key);
+    if (data != null) {
+      _currentSizeBytes -= data.length;
+    }
+    return data;
+  }
+
+  /// Clear all cached images.
+  void clear() {
+    _cache.clear();
+    _accessOrder.clear();
+    _currentSizeBytes = 0;
+  }
+
+  /// Get the number of cached images.
+  int get length => _cache.length;
+
+  /// Check if cache is empty.
+  bool get isEmpty => _cache.isEmpty;
+
+  /// Check if cache is not empty.
+  bool get isNotEmpty => _cache.isNotEmpty;
 }
