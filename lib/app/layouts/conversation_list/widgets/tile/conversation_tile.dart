@@ -318,6 +318,7 @@ class ChatTitle extends CustomStateful<ConversationTileController> {
 class _ChatTitleState extends CustomState<ChatTitle, void, ConversationTileController> {
   String title = "Unknown";
   StreamSubscription? sub;
+  late StreamSubscription _eventSubscription;
   String? cachedDisplayName = "";
   List<Handle> cachedParticipants = [];
 
@@ -356,7 +357,7 @@ class _ChatTitleState extends CustomState<ChatTitle, void, ConversationTileContr
         });
       });
       // listen for contacts update (if tile is active, we can update it)
-      eventDispatcher.stream.listen((event) {
+      _eventSubscription = eventDispatcher.stream.listen((event) {
         if (event.item1 != 'update-contacts') return;
         if (event.item2.isNotEmpty) {
           bool changed = false;
@@ -402,13 +403,16 @@ class _ChatTitleState extends CustomState<ChatTitle, void, ConversationTileContr
 
   @override
   void dispose() {
-    if (!kIsWeb) sub?.cancel();
+    if (!kIsWeb) {
+      sub?.cancel();
+      _eventSubscription.cancel();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
+    return Obx(() => {
       final hideInfo = ss.settings.redactedMode.value && ss.settings.hideContactInfo.value;
       String _title = title;
       if (hideInfo) {
@@ -441,6 +445,7 @@ class _ChatSubtitleState extends CustomState<ChatSubtitle, void, ConversationTil
   String subtitle = "Unknown";
   String fakeText = faker.lorem.words(1).join(" ");
   StreamSubscription? sub;
+  late StreamSubscription _eventSubscription;
   String? cachedLatestMessageGuid = "";
   DateTime? cachedDateCreated;
   DateTime? cachedDateEdited;
@@ -498,7 +503,7 @@ class _ChatSubtitleState extends CustomState<ChatSubtitle, void, ConversationTil
       });
     } else {
       // listen for contacts update (if tile is active, we can update it)
-      eventDispatcher.stream.listen((event) {
+      _eventSubscription = eventDispatcher.stream.listen((event) {
         if (event.item1 != 'update-contacts') return;
         if (event.item2.isNotEmpty) {
           String newSubtitle = MessageHelper.getNotificationText(controller.chat.latestMessage);
@@ -540,12 +545,13 @@ class _ChatSubtitleState extends CustomState<ChatSubtitle, void, ConversationTil
   @override
   void dispose() {
     sub?.cancel();
+    if (kIsWeb) _eventSubscription.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
+    return Obx(() => {
       final hideContent = ss.settings.redactedMode.value && ss.settings.hideMessageContent.value;
       final hideContacts = ss.settings.redactedMode.value && ss.settings.hideContactInfo.value;
       String _subtitle = hideContent ? fakeText : hideContacts && !kIsWeb ? MessageHelper.getNotificationText(Message.findOne(guid: cachedLatestMessageGuid!)!) : subtitle;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:bluebubbles/app/components/custom/custom_bouncing_scroll_physics.dart';
@@ -84,6 +85,7 @@ class _MessageHolderState extends CustomState<MessageHolder, void, MessageWidget
   List<GlobalKey> keys = [];
   bool gaveHapticFeedback = false;
   final RxBool tapped = false.obs;
+  late StreamSubscription _eventSubscription;
 
   @override
   void initState() {
@@ -105,7 +107,7 @@ class _MessageHolderState extends CustomState<MessageHolder, void, MessageWidget
       keys = List.generate(messageParts.length, (_) => GlobalKey());
     }
 
-    eventDispatcher.stream.listen((event) {
+    _eventSubscription = eventDispatcher.stream.listen((event) {
       if (event.item1 != 'refresh-avatar') return;
       if (event.item2[0] != message.handle?.address) return;
       message.handle?.color = event.item2[1];
@@ -117,6 +119,12 @@ class _MessageHolderState extends CustomState<MessageHolder, void, MessageWidget
   void updateWidget(void _) {
     messageParts = controller.parts;
     super.updateWidget(_);
+  }
+
+  @override
+  void dispose() {
+    _eventSubscription.cancel();
+    super.dispose();
   }
 
   List<Color> getBubbleColors() {
