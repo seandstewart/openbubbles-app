@@ -5,6 +5,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -12,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
 import androidx.core.graphics.drawable.IconCompat
+import java.io.File
 import com.bluebubbles.messaging.BubbleActivity
 import com.bluebubbles.messaging.Constants
 import com.bluebubbles.messaging.MainActivity
@@ -49,8 +53,15 @@ class CreateIncomingMessageNotification: MethodCallHandlerImpl() {
         val messageIsFromMe: Boolean = call.argument("message_is_from_me")!!
         // contact details
         val contactName: String = call.argument("contact_name")!!
-        val contactIcon: ByteArray? = call.argument("contact_avatar")
-        val contactBitmap = if ((contactIcon?.size ?: 0) == 0) null else Utils.getAdaptiveIconFromByteArray(contactIcon!!)
+        val contactAvatarUri: String? = call.argument("contact_avatar_uri")
+        val contactBitmap = if (contactAvatarUri != null) {
+            try {
+                BitmapFactory.decodeFile(contactAvatarUri)
+            } catch (e: Exception) {
+                Log.w(Constants.logTag, "Failed to load contact avatar from URI: $contactAvatarUri", e)
+                null
+            }
+        } else null
         val chat_uri: String? = call.argument("contact_uri")
 
         val name = if (notifyAnyways) {
@@ -70,6 +81,17 @@ class CreateIncomingMessageNotification: MethodCallHandlerImpl() {
         }
 
         PushShareTargetsHandler().pushShareTarget(context, chatTitle, chatGuid, chatIcon)
+
+        // Cleanup stale avatar files (older than 1 hour)
+        try {
+            val tempDir = File(context.filesDir, "temp")
+            val cutoffTime = System.currentTimeMillis() - 3600000L
+            tempDir.listFiles()?.filter {
+                it.name.startsWith("avatar_") && it.lastModified() < cutoffTime
+            }?.forEach { it.delete() }
+        } catch (e: Exception) {
+            Log.w(Constants.logTag, "Failed to cleanup avatar files", e)
+        }
 
         val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val channelId = if (notifyAnyways) {
