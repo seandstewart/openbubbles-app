@@ -107,7 +107,7 @@ class ChatsService extends GetxService {
       return;
     }
 
-    final newChats = <Chat>[];
+    final allChats = <Chat>[];
     final batches = (currentCount < batchSize) ? batchSize : (currentCount / batchSize).ceil();
 
     for (int i = 0; i < batches; i++) {
@@ -127,11 +127,12 @@ class ChatsService extends GetxService {
       for (Chat c in temp) {
         cm.createChatController(c, active: cm.activeChat?.chat.guid == c.guid);
       }
-      newChats.addAll(temp);
-      newChats.sort(Chat.sort);
-      chats.value = newChats;
+      allChats.addAll(temp);
       loadedChatBatch.value = true;
     }
+
+    allChats.sort(Chat.sort);
+    chats.value = allChats;
     loadChatSuggestions();
     loadedAllChats.complete();
     Logger.info("Finished fetching chats (${chats.length}).", tag: "ChatBloc");
