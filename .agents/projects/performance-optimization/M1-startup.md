@@ -1,7 +1,7 @@
 # M1 — Startup Time & Ready Signal
 
 **Theme:** Reduce cold-start from 60–180s to <5s  
-**Status:** Proposed  
+**Status:** In Progress (M1.1 ✅, M1.2 ✅, M1.3 ✅)
 **ADRs:** [ADR-001](../../adrs/ADR-001-parallel-icloud-init.md), [ADR-002](../../adrs/ADR-002-tokio-worker-threads.md), [ADR-003](../../adrs/ADR-003-async-file-io.md), [ADR-004](../../adrs/ADR-004-binary-plist.md)
 
 ---
@@ -36,9 +36,9 @@
    ```
 
 **Acceptance Criteria:**
-- [ ] `native_ready` fires within 5 seconds of launch on 4G
-- [ ] iCloud services continue initializing after ready signal
-- [ ] No regression in iCloud feature availability once Phase 2 completes
+- [x] `native_ready` fires within 5 seconds of launch on 4G
+- [x] iCloud services continue initializing after ready signal
+- [x] No regression in iCloud feature availability once Phase 2 completes
 
 ---
 

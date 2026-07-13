@@ -1,6 +1,6 @@
 # ADR-002 — Increase Tokio Runtime Worker Thread Count
 
-**Status:** Proposed  
+**Status:** Implemented
 **Date:** 2026-07-11  
 **Project:** [Performance Optimization](../projects/performance-optimization/M1-startup.md)
 

@@ -1,7 +1,7 @@
 # M3 — UI Responsiveness
 
 **Theme:** Smooth scrolling and rendering on mid-range devices  
-**Status:** Proposed  
+**Status:** In Progress (M3.1 ✅, M3.2 ✅, M3.3 ✅, M3.4 ✅, M3.7 ✅, M3.8 ✅, M3.9 ✅)
 **ADRs:** [ADR-005](../../adrs/ADR-005-batch-message-watcher.md), [ADR-006](../../adrs/ADR-006-globalchatservice-delta.md), [ADR-007](../../adrs/ADR-007-contact-phone-index.md), [ADR-012](../../adrs/ADR-012-parallel-avatar-loading.md), [ADR-013](../../adrs/ADR-013-mlkit-off-build-path.md)
 
 ---
@@ -51,9 +51,9 @@ void _initWatcher(int chatId) {
 ```
 
 **Acceptance Criteria:**
-- [ ] Opening 200-message conversation creates exactly 1 ObjectBox watcher
-- [ ] Message updates reflect in UI within 100ms
-- [ ] No regression in reaction/edit/unsend UI updates
+- [x] Opening 200-message conversation creates exactly 1 ObjectBox watcher
+- [x] Message updates reflect in UI within 100ms
+- [x] No regression in reaction/edit/unsend UI updates
 
 ---
 
@@ -86,9 +86,9 @@ Database.chats.query().watch().listen((event) {
 ```
 
 **Acceptance Criteria:**
-- [ ] Receiving message in one chat does not re-evaluate all other chats
-- [ ] Unread count badge updates within 200ms of message receipt
-- [ ] Memory profile shows no growing chat collection
+- [x] Receiving message in one chat does not re-evaluate all other chats
+- [x] Unread count badge updates within 200ms of message receipt
+- [x] Memory profile shows no growing chat collection
 
 ---
 
@@ -131,9 +131,9 @@ Contact? matchHandleToContact(String address) {
 Rebuild `_buildIndex()` only when `contacts` refreshed.
 
 **Acceptance Criteria:**
-- [ ] `matchHandleToContact` executes in O(1)
-- [ ] Handle sync time decreases proportionally
-- [ ] Contact matching accuracy unchanged (same normalization logic)
+- [x] `matchHandleToContact` executes in O(1)
+- [x] Handle sync time decreases proportionally
+- [x] Contact matching accuracy unchanged (same normalization logic)
 
 ---
 
@@ -160,8 +160,8 @@ for (int i = 0; i < _contacts.length; i += _avatarBatchSize) {
 ```
 
 **Acceptance Criteria:**
-- [ ] Contact avatar loading completes 10–20× faster
-- [ ] No memory spike from loading all avatars simultaneously (batch cap enforces this)
+- [x] Contact avatar loading completes 10–20× faster
+- [x] No memory spike from loading all avatars simultaneously (batch cap enforces this)
 
 ---
 
@@ -285,5 +285,5 @@ loadedChatBatch.value = true;
 ```
 
 **Acceptance Criteria:**
-- [ ] `ChatsService.init()` triggers exactly 1 `RxList` notification
-- [ ] Startup frame count decreases measurably (profiler)
+- [x] `ChatsService.init()` triggers exactly 1 `RxList` notification
+- [x] Startup frame count decreases measurably (profiler)

@@ -1,7 +1,7 @@
 # M2 — Message Delivery Pipeline
 
 **Theme:** Fast, gap-free, crash-safe message delivery  
-**Status:** Proposed  
+**Status:** In Progress (M2.1 ✅, M2.5 ✅)
 **ADRs:** [ADR-009](../../adrs/ADR-009-dpoll-backoff.md), [ADR-010](../../adrs/ADR-010-parallel-handler-dispatch.md), [ADR-011](../../adrs/ADR-011-retry-task-cancellation.md)
 
 ---

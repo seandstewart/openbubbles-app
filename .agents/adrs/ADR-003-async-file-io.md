@@ -1,6 +1,6 @@
 # ADR-003 — Replace Blocking File I/O with `tokio::fs` in Async Contexts
 
-**Status:** Proposed  
+**Status:** Implemented
 **Date:** 2026-07-11  
 **Project:** [Performance Optimization](../projects/performance-optimization/M1-startup.md)
 

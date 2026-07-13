@@ -1,7 +1,7 @@
 # M6 — Sync Performance
 
 **Theme:** Faster initial & incremental sync  
-**Status:** Proposed  
+**Status:** In Progress (M6.2 ✅)
 **ADRs:** [ADR-016](../../adrs/ADR-016-parallel-sync.md), [ADR-017](../../adrs/ADR-017-db-transactions.md)
 
 ---
@@ -57,8 +57,8 @@ await for (final page in _streamHandlePages()) {
 ```
 
 **Acceptance Criteria:**
-- [ ] Handle sync time decreases proportionally to concurrency
-- [ ] Formatted addresses consistent with sequential version
+- [x] Handle sync time decreases proportionally to concurrency
+- [x] Formatted addresses consistent with sequential version
 
 ---
 

@@ -1,7 +1,7 @@
 # M4 — Memory Footprint
 
 **Theme:** Prevent OOM crashes; stable RAM on media-heavy chats  
-**Status:** Proposed  
+**Status:** In Progress (M4.1 ✅, M4.2 ✅)
 **ADRs:** [ADR-008](../../adrs/ADR-008-lru-image-cache.md), [ADR-014](../../adrs/ADR-014-chunked-cloudkit-erase.md), [ADR-015](../../adrs/ADR-015-avatar-file-uri.md)
 
 ---
@@ -37,9 +37,9 @@ void cacheImage(String guid, Uint8List bytes) {
 ```
 
 **Acceptance Criteria:**
-- [ ] `imageData` never exceeds 50 entries (~100 MB worst-case)
-- [ ] Evicted images re-loaded from disk on next access
-- [ ] Long-running sessions do not grow heap unboundedly
+- [x] `imageData` never exceeds 50 entries (~100 MB worst-case)
+- [x] Evicted images re-loaded from disk on next access
+- [x] Long-running sessions do not grow heap unboundedly
 
 ---
 
@@ -72,9 +72,9 @@ Future<void> _clearCkIds<T>(Box<T> box, void Function(T) clearId) async {
 ```
 
 **Acceptance Criteria:**
-- [ ] `eraseCloudKitSync()` holds at most 500 entities in memory at once
-- [ ] Completes successfully on device with 50,000 messages
-- [ ] No OOM crash during operation
+- [x] `eraseCloudKitSync()` holds at most 500 entities in memory at once
+- [x] Completes successfully on device with 50,000 messages
+- [x] No OOM crash during operation
 
 ---
 

@@ -14,12 +14,12 @@ Eliminate performance bottlenecks to make OpenBubbles usable on low-end Android 
 
 | ID | Milestone | Primary Files | Status |
 |---|---|---|---|
-| [M1](M1-startup.md) | Startup Time & Ready Signal | `rust/src/api/api.rs`, `rust/src/lib.rs` | Proposed (M1.1 ✅) |
-| [M2](M2-message-delivery.md) | Message Delivery Pipeline | `rustpush_service.dart`, `native.rs`, `SocketIOForegroundService.kt` | Proposed |
-| [M3](M3-ui-responsiveness.md) | UI Responsiveness | `MessageWidgetController`, `GlobalChatService`, `contact_service.dart` | In Progress (M3.1-4 ✅, M3.5 ✅, M3.9 ✅) |
+| [M1](M1-startup.md) | Startup Time & Ready Signal | `rust/src/api/api.rs`, `rust/src/lib.rs` | In Progress (M1.1 ✅, M1.2 ✅, M1.3 ✅) |
+| [M2](M2-message-delivery.md) | Message Delivery Pipeline | `rustpush_service.dart`, `native.rs`, `SocketIOForegroundService.kt` | In Progress (M2.1 ✅, M2.5 ✅) |
+| [M3](M3-ui-responsiveness.md) | UI Responsiveness | `MessageWidgetController`, `GlobalChatService`, `contact_service.dart` | In Progress (M3.1-4 ✅, M3.7 ✅, M3.8 ✅, M3.9 ✅) |
 | [M4](M4-memory.md) | Memory Footprint | `ConversationViewController`, `eraseCloudKitSync`, `MethodCallHandler.kt` | In Progress (M4.1 ✅, M4.2 ✅) |
 | [M5](M5-background-battery.md) | Background & Battery | `SocketIOForegroundService.kt`, `AndroidManifest.xml`, `DartWorker.kt` | Proposed |
-| [M6](M6-sync.md) | Sync Performance | All sync managers, `sync_helpers.dart` | Proposed |
+| [M6](M6-sync.md) | Sync Performance | All sync managers, `sync_helpers.dart` | In Progress (M6.2 ✅) |
 | [M7](M7-hardening.md) | Hardening & Correctness | Scattered | Proposed |
 
 ## Architecture Decision Records

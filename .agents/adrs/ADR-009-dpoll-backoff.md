@@ -1,6 +1,6 @@
 # ADR-009 — Exponential Backoff in `doPoll()` Error Handling
 
-**Status:** Proposed  
+**Status:** Implemented
 **Date:** 2026-07-11  
 **Project:** [Performance Optimization](../projects/performance-optimization/M2-message-delivery.md)
 

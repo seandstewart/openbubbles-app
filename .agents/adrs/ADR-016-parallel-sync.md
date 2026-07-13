@@ -1,6 +1,6 @@
 # ADR-016 — Concurrent Chat and Handle Sync Operations
 
-**Status:** Proposed  
+**Status:** Implemented
 **Date:** 2026-07-11  
 **Project:** [Performance Optimization](../projects/performance-optimization/M6-sync.md)
 
