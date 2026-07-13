@@ -25,6 +25,8 @@ import io.flutter.view.FlutterCallbackInformation
 import io.flutter.view.FlutterMain
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineContext
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -36,7 +38,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlinx.coroutines.guava.future
 import java.util.TimerTask
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.Collections
 
 class DartWorker(context: Context, workerParams: WorkerParameters): ListenableWorker(context, workerParams) {
 
@@ -57,7 +59,7 @@ class DartWorker(context: Context, workerParams: WorkerParameters): ListenableWo
             val info = ApplicationInfoLoader.load(applicationContext)
             workerEngine = FlutterEngine(applicationContext)
 
-            currentJobs.set(0)
+            activeJobs.clear()
 
             workerEngine!!.addEngineLifecycleListener ( object : FlutterEngine.EngineLifecycleListener {
                 override fun onPreEngineRestart() {
@@ -89,14 +91,15 @@ class DartWorker(context: Context, workerParams: WorkerParameters): ListenableWo
         }
 
         var currentCancelTask: TimerTask? = null
+        private val activeJobs = Collections.synchronizedSet(mutableSetOf<Job>())
+
         private fun closeEngineIfNeeded(applicationContext: Context) {
-            currentJobs.getAndDecrement()
             // Delay 30 seconds so Dart has a chance to complete everything and in case new work comes in shortly after
             currentCancelTask?.cancel()
             currentCancelTask = Timer().schedule(30000) {
                 currentCancelTask = null
-                Log.d(Constants.logTag, "$currentJobs worker(s) still queued")
-                if (currentJobs.get() == 0 && workerEngine != null) {
+                Log.d(Constants.logTag, "${activeJobs.size} worker(s) still queued")
+                if (activeJobs.isEmpty() && workerEngine != null) {
                     Log.d(Constants.logTag, "Closing ${Constants.dartWorkerTag} engine")
                     // This must be run on main thread
                     CoroutineScope(Dispatchers.Main).launch {
@@ -106,8 +109,6 @@ class DartWorker(context: Context, workerParams: WorkerParameters): ListenableWo
                 }
             }
         }
-
-        var currentJobs = AtomicInteger(0)
 
         suspend fun callMethod(applicationContext: Context, method: String, arguments: Map<String, Any>) {
             engineReady.withLock {
@@ -129,23 +130,27 @@ class DartWorker(context: Context, workerParams: WorkerParameters): ListenableWo
 
                 Log.d(Constants.logTag, "Invoking method channel...")
                 suspendCoroutine { cont ->
-                    currentJobs.getAndIncrement()
+                    val currentJob = coroutineContext[Job]
+                    if (currentJob != null) activeJobs.add(currentJob)
                     MethodChannel(engineToUse!!.dartExecutor.binaryMessenger, Constants.methodChannel).invokeMethod(method, arguments, object : MethodChannel.Result {
                         override fun success(result: Any?) {
                             Log.d(Constants.logTag, "Worker with method $method completed successfully")
                             cont.resume(Result.success())
+                            if (currentJob != null) activeJobs.remove(currentJob)
                             closeEngineIfNeeded(applicationContext)
                         }
 
                         override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
                             Log.e(Constants.logTag, "Worker with method $method failed!")
                             cont.resume(Result.failure())
+                            if (currentJob != null) activeJobs.remove(currentJob)
                             closeEngineIfNeeded(applicationContext)
                         }
 
                         override fun notImplemented() {
                             Log.e(Constants.logTag, "Worker with method $method not implemented on Dart side")
                             cont.resume(Result.failure())
+                            if (currentJob != null) activeJobs.remove(currentJob)
                             closeEngineIfNeeded(applicationContext)
                         }
                     })
@@ -154,6 +159,8 @@ class DartWorker(context: Context, workerParams: WorkerParameters): ListenableWo
                 Log.d(Constants.logTag, "Worker with method $method completed successfully")
             } catch (e: Exception) {
                 Log.d(Constants.logTag, "Error sending method $method to Dart: ${e.message}")
+                val currentJob = coroutineContext[Job]
+                if (currentJob != null) activeJobs.remove(currentJob)
                 throw e
             }
         }
@@ -168,8 +175,9 @@ class DartWorker(context: Context, workerParams: WorkerParameters): ListenableWo
         if (method == "SMSMsg") {
             val json: HashMap<String, Any> = gson.fromJson(data, TypeToken.getParameterized(HashMap::class.java, String::class.java, Any::class.java).type)
             val pointer: Int = (json["id"] as Long).toInt()
-            if (MethodCallHandler.queuedMessages.contains(pointer)) {
-                data = MethodCallHandler.queuedMessages.remove(pointer)!!
+            val queuedData = MethodCallHandler.dequeueMessage(pointer)
+            if (queuedData != null) {
+                data = queuedData
             } else {
                 // bail
                 return Futures.immediateFuture(Result.success())

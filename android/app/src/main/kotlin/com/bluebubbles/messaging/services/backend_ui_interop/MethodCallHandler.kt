@@ -3,6 +3,7 @@ package com.bluebubbles.messaging.services.backend_ui_interop
 import android.content.Context
 import android.util.Log
 import com.bluebubbles.messaging.Constants
+import java.util.concurrent.ConcurrentHashMap
 import com.bluebubbles.messaging.MainActivity
 import com.bluebubbles.messaging.MainActivity.Companion.engine
 import com.bluebubbles.messaging.services.extension.DevExtensionHandler
@@ -66,8 +67,33 @@ class MethodCallHandler {
     companion object {
         var getNotificationListenerResult: MethodChannel.Result? = null
 
+        private const val MAX_QUEUED = 200
+        private const val MAX_AGE_MS = 5 * 60 * 1000L  // 5 min
+
         var queueId = 0
-        var queuedMessages = HashMap<Int, String>()
+        private data class QueuedMsg(val data: String, val timestampMs: Long)
+        private val queuedMessages = ConcurrentHashMap<Int, QueuedMsg>()
+
+        fun queueMessage(id: Int, data: String) {
+            // Evict expired entries
+            val now = System.currentTimeMillis()
+            queuedMessages.entries.removeIf { (_, msg) -> now - msg.timestampMs > MAX_AGE_MS }
+            
+            // Evict oldest if at capacity
+            if (queuedMessages.size >= MAX_QUEUED) {
+                val oldest = queuedMessages.minByOrNull { (_, msg) -> msg.timestampMs }
+                if (oldest != null) {
+                    queuedMessages.remove(oldest.first)
+                }
+            }
+            
+            queuedMessages[id] = QueuedMsg(data, now)
+        }
+
+        fun dequeueMessage(id: Int): String? {
+            val msg = queuedMessages.remove(id)
+            return msg?.data
+        }
 
         /// Send a method call back to Dart (app must be launched, otherwise use the DartWorker!)
         fun invokeMethod(method: String, arguments: Map<String, Any>) {
