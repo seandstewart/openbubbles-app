@@ -192,7 +192,8 @@
         <receiver
             android:name=".services.foreground.ForegroundServiceBroadcastReceiver"
             android:enabled="true"
-            android:exported="true">
+            android:exported="true"
+            android:permission="com.bluebubbles.messaging.RESTART_SERVICE">
             <intent-filter>
                 <action android:name="restartservice" />
             </intent-filter>
@@ -467,5 +468,9 @@
             android:name="WindowManagerPreference:FreeformWindowOrientation"
             android:value="landscape" />
     </application>
+
+    <permission
+        android:name="com.bluebubbles.messaging.RESTART_SERVICE"
+        android:protectionLevel="signature" />
 
 </manifest>
