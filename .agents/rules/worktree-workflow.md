@@ -1,62 +1,38 @@
-# Rule: Git Worktree Workflow for Large Projects
-
-## When to Use Worktrees
-
-Use a git worktree for any project that:
-- Spans multiple milestones or sessions
-- Requires changes that must not land on `rustpush` until reviewed
-- Involves parallel streams of work (e.g., two milestones in flight simultaneously)
-- Is risky enough that a clean rollback path is required
-
-Do **not** use a worktree for:
-- Single-file bug fixes
-- Documentation-only changes
-- Changes that can be reviewed and merged in one session
-
-## Naming Convention
-
-Worktree directories live under:
-```
-~/projects/worktrees/openbubbles-app/<slug>/openbubbles-app
-```
-
-- `<slug>` is a short unique identifier for the work (e.g., `perf-m1`, `desktop-keychain`)
-- Each worktree checks out its own dedicated branch (see below)
+# Rule: Git Branch Workflow
 
 ## Branch Convention
 
-| Purpose | Branch name format | Example |
-|---|---|---|
-| Feature project | `project/<slug>` | `project/perf-m1` |
-| Experimental | `experiment/<slug>` | `experiment/lru-cache` |
-| Hotfix from worktree | `fix/<slug>` | `fix/apns-crash` |
+One branch per task. One commit per task.
 
-Branch from `rustpush` (the mainline) unless the work builds on another in-flight project branch.
-
-## Creating a Worktree
-
-```bash
-# From the main repo root
-git worktree add ~/projects/worktrees/openbubbles-app/<slug>/openbubbles-app -b project/<slug> rustpush
+```
+project/<project-slug>/<milestone>/<task>-<slug>
 ```
 
-Then open the worktree path in Zed as a new project window.
+Examples:
+- `project/perf-opt/m1/1-parallel-icloud-init`
+- `project/perf-opt/m5/3-lru-image-cache`
+- `project/desktop-keychain/m2/1-platform-keychain`
 
-## Agent Behavior Inside a Worktree
+Branch from `rustpush` unless work builds on an in-flight project branch.
 
-- All file reads and edits target the worktree path — never the main repo path.
-- Never `cd` or reference `~/projects/openbubbles-app` from inside a worktree session.
-- Commits made inside the worktree stay on the feature branch and do not touch `rustpush`.
-- Use `git --no-pager worktree list` to confirm current context if uncertain.
+```bash
+git checkout rustpush
+git pull
+git checkout -b project/<project-slug>/<milestone>/<task>-<slug>
+```
 
-## Committing Inside a Worktree
+## Committing
 
-**One branch per task. One commit per task.** Never batch multiple tasks into one branch.
+One commit per task. Task branches contain only code files changed by that task — no `.agents/` updates.
 
-Branch naming: `project/<slug>-<task-id>` (e.g. `project/perf-m12`).
+Commit format:
+```
+<type>(<scope>): <summary>
 
-Task branches contain only the code files changed by that task — no `.agents/` doc updates.
+Task <milestone>.<task> — <brief rationale>
+```
 
+Example:
 ```
 perf(rust): increase Tokio worker thread count
 
@@ -65,33 +41,27 @@ Task M1.2 — replaces worker_threads(1) with available_parallelism().min(4).
 
 ## Project Docs Branch
 
-A long-lived docs branch (e.g. `project/agent-docs`) tracks all `.agents/` project files. After committing task branches, check off acceptance criteria on the docs branch by pulling the updated milestone files from each task branch:
+A long-lived docs branch (e.g. `project/agent-docs`) tracks all `.agents/` project files. After committing a task branch, check off acceptance criteria on the docs branch:
 
 ```bash
 git checkout project/agent-docs
-git checkout project/perf-m12 -- .agents/projects/performance-optimization/M1-startup.md
+git checkout project/perf-opt/m1/2-tokio-threads -- .agents/projects/performance-optimization/M1-startup.md
 git commit -m "docs(perf): mark M1.2 acceptance criteria complete"
 ```
 
 Never commit task code to the docs branch. Never commit `.agents/` updates to a task branch.
 
-## Merging Back to Mainline
+## Merging
 
-1. Ensure all acceptance criteria in affected milestone files are checked off.
-2. Run full build and relevant tests from within the worktree.
-3. Push the feature branch: `git push origin project/<slug>`
-4. Open a PR from `project/<slug>` into `rustpush`.
-5. After merge, remove the worktree:
-
-```bash
-git worktree remove ~/projects/worktrees/openbubbles-app/<slug>/openbubbles-app
-git branch -d project/<slug>
-```
+1. Ensure acceptance criteria in affected milestone files are checked off.
+2. Run full build and relevant tests.
+3. Push: `git push origin project/<project-slug>/<milestone>/<task>-<slug>`
+4. Open PR into `rustpush`.
+5. After merge, delete branch: `git branch -d project/<project-slug>/<milestone>/<task>-<slug>`
 
 ## Do Not
 
-- Do not commit directly to `rustpush` from a worktree session
-- Do not create a worktree without a dedicated branch (detached HEAD = no rollback)
-- Do not leave stale worktrees after project merges — they consume disk and confuse `git worktree list`
-- Do not share one worktree across two unrelated projects
-- Do not open the main repo and the worktree in the same Zed window — separate windows prevent path confusion
+- Commit directly to `rustpush`
+- Batch multiple tasks into one branch or commit
+- Commit `.agents/` doc updates to a task branch
+- Commit task code to the docs branch
