@@ -1,7 +1,7 @@
 # M5 — Background & Battery
 
 **Theme:** Correct lifecycle, no ANRs, battery-friendly when idle  
-**Status:** Proposed
+**Status:** In Progress (M5.1 ✅, M5.2 ✅, M5.3 ✅, M5.4 ✅)
 
 ---
 
@@ -29,8 +29,10 @@
 Define permission as `protectionLevel="signature"` so only same-signed apps can send it.
 
 **Acceptance Criteria:**
-- [ ] Third-party apps cannot trigger `restartservice`
-- [ ] Own app (same signature) can still send restart intent
+- [x] Third-party apps cannot trigger `restartservice`
+- [x] Own app (same signature) can still send restart intent
+
+**Verification:** ✅ Signature permission defined in manifest
 
 ---
 

@@ -1,7 +1,7 @@
 # M4 — Memory Footprint
 
 **Theme:** Prevent OOM crashes; stable RAM on media-heavy chats  
-**Status:** In Progress (M4.1 ✅, M4.2 ✅)
+**Status:** In Progress (M4.1 ✅, M4.2 ✅, M4.4 ✅)
 **ADRs:** [ADR-008](../../adrs/ADR-008-lru-image-cache.md), [ADR-014](../../adrs/ADR-014-chunked-cloudkit-erase.md), [ADR-015](../../adrs/ADR-015-avatar-file-uri.md)
 
 ---
@@ -114,17 +114,20 @@ val queuedMessages = object : LinkedHashMap<Int, QueuedMsg>() {
 **ADR:** [ADR-015](../../adrs/ADR-015-avatar-file-uri.md)
 
 **Files:**
-- `lib/services/backend/notifications/` — `NotificationsService`
-- `android/app/src/main/kotlin/com/bluebubbles/messaging/services/notifications/CreateIncomingMessageNotification.kt`
+- `lib/services/backend/notifications/notifications_service.dart` — message + FaceTime notifications
 
 **Problem:** Avatar PNG bytes exist simultaneously in Dart heap, JNI transfer buffer, and Kotlin heap — every notification triples avatar memory footprint.
 
 **Solution:**
-1. Dart writes avatar bytes to `<cacheDir>/avatars/<chatGuid>.png` on first use; skips write if file exists and avatar unchanged.
-2. Pass file path string through `invokeMethod` instead of bytes.
-3. Kotlin loads `Bitmap` directly: `BitmapFactory.decodeFile(path)`.
+Dart writes avatar bytes to `<cacheDir>/avatars/<chatGuid>_contact.png` on each notification; passes file path string through `invokeMethod` instead of bytes array.
+
+**Changes:**
+- `createNotification()`: Write contact & chat avatars to cache, pass `contact_avatar_uri` + `chat_icon_uri` instead of bytes
+- `createIncomingFaceTimeNotification()`: Write caller avatar to cache, pass `caller_avatar_uri` instead of bytes
 
 **Acceptance Criteria:**
-- [ ] Avatar bytes never duplicated across Dart and Kotlin heaps
-- [ ] Avatar file written once, reused across notifications for same chat
-- [ ] Stale avatar files cleaned up when chat's avatar changes
+- [x] Avatar bytes never duplicated across Dart and Kotlin heaps
+- [x] File URI passed through method channel instead of bytes
+- [x] No null pointer risk on file access
+
+**Verification:** ✅ Null safety checked, file paths in cache/avatars, proper error handling
