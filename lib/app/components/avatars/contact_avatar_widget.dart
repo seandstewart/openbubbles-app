@@ -37,16 +37,23 @@ class ContactAvatarWidget extends StatefulWidget {
 class _ContactAvatarWidgetState extends OptimizedState<ContactAvatarWidget> {
   Contact? get contact => widget.contact ?? widget.handle?.contact;
   String get keyPrefix => widget.handle?.address ?? randomString(8);
+  late final StreamSubscription _eventSubscription;
 
   @override
   void initState() {
     super.initState();
-    eventDispatcher.stream.listen((event) {
+    _eventSubscription = eventDispatcher.stream.listen((event) {
       if (event.item1 != 'refresh-avatar') return;
       if (event.item2[0] != widget.handle?.address) return;
       widget.handle?.color = event.item2[1];
       setState(() {});
     });
+  }
+
+  @override
+  void dispose() {
+    _eventSubscription.cancel();
+    super.dispose();
   }
 
   void onAvatarTap() async {

@@ -41,12 +41,13 @@ class _BubbleEffectsState extends OptimizedState<BubbleEffects> {
   late MovieTween tween;
   Control controller = Control.stop;
   Size size = Size.zero;
+  late final StreamSubscription _eventSubscription;
 
   @override
   void initState() {
     getTween();
 
-    eventDispatcher.stream.listen((event) async {
+    _eventSubscription = eventDispatcher.stream.listen((event) async {
       if (event.item1 == 'play-bubble-effect' && event.item2 == '${widget.part}/${widget.message.guid}') {
         size = widget.globalKey?.currentContext?.size ?? Size.zero;
         setState(() {
@@ -56,6 +57,12 @@ class _BubbleEffectsState extends OptimizedState<BubbleEffects> {
     });
 
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _eventSubscription.cancel();
+    super.dispose();
   }
 
   void getTween() {

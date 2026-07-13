@@ -61,6 +61,7 @@ class MessagesViewState extends OptimizedState<MessagesView> {
   final RxBool latestMessageDeliveredState = false.obs;
   final RxBool jumpingToOldestUnread = false.obs;
   final Map<String, FocusNode> messageFocusNodes = {};
+  late final StreamSubscription _eventSubscription;
 
   ConversationViewController get controller => widget.controller;
 
@@ -135,7 +136,7 @@ class MessagesViewState extends OptimizedState<MessagesView> {
   void initState() {
     super.initState();
 
-    eventDispatcher.stream.listen((e) async {
+    _eventSubscription = eventDispatcher.stream.listen((e) async {
       if (e.item1 == "refresh-messagebloc" && e.item2 == chat.guid) {
         // Clear state items
         noMoreMessages = false;
@@ -200,6 +201,7 @@ class MessagesViewState extends OptimizedState<MessagesView> {
 
   @override
   void dispose() {
+    _eventSubscription.cancel();
     if (!kIsWeb && !kIsDesktop) smartReply.close();
     chat.lastReadMessageGuid = _messages.first.guid;
     chat.save(updateLastReadMessageGuid: true);
