@@ -476,7 +476,7 @@ class _ProfilePanelState extends OptimizedState<ProfilePanel> with WidgetsBindin
                           }
                           if (val) {
                             if (!await pushService.joinClique()) return;
-                            pushService.eraseCloudKitSync();
+                            await pushService.eraseCloudKitSync();
                           }
 
                           Logger.info("Enabling messages in iCloud!");

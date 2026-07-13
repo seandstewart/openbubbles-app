@@ -2119,7 +2119,33 @@ class RustPushService extends GetxService {
 
   bool syncStopDelete = false;
 
-  void eraseCloudKitSync() {
+  Future<void> _clearCkIds<T extends Entity>(
+    Box<T> box,
+    Query<T> Function() queryBuilder,
+    void Function(T) clearId, {
+    int chunkSize = 500,
+  }) async {
+    final query = queryBuilder();
+    try {
+      int offset = 0;
+      while (true) {
+        final chunk = query.find(offset: offset, limit: chunkSize);
+        if (chunk.isEmpty) break;
+        
+        for (var entity in chunk) {
+          clearId(entity);
+        }
+        
+        await box.putMany(chunk);
+        offset += chunkSize;
+        await Future.delayed(Duration.zero);
+      }
+    } finally {
+      query.close();
+    }
+  }
+
+  Future<void> eraseCloudKitSync() async {
     if (ss.prefs.getString("chatSyncToken") == null) return;
     ss.prefs.remove("chatSyncToken");
     ss.prefs.remove("messageSyncToken");
@@ -2127,25 +2153,34 @@ class RustPushService extends GetxService {
     ss.prefs.remove("chatDeletionIds-1");
     ss.prefs.remove("messageDeletionIds-1");
     ss.prefs.remove("attachmentDeletionIds-1");
-    var messages = Database.messages.getAll();
-    for (var message in messages) {
-      message.ckRecordId = null;
-      message.ckSyncState = false;
-    }
-    Database.messages.putMany(messages);
-    var chats = Database.chats.getAll();
-    for (var chat in chats) {
-      chat.ckRecordId = null;
-      chat.ckSyncState = false;
-      chat.cloudData = null;
-      chat.photoAttachmentGuid = null;
-    }
-    Database.chats.putMany(chats);
-    var attachments = Database.attachments.getAll();
-    for (var attachment in attachments) {
-      attachment.ckRecordId = null;
-    }
-    Database.attachments.putMany(attachments);
+    
+    await _clearCkIds(
+      Database.messages,
+      () => Database.messages.query().build(),
+      (message) {
+        message.ckRecordId = null;
+        message.ckSyncState = false;
+      },
+    );
+    
+    await _clearCkIds(
+      Database.chats,
+      () => Database.chats.query().build(),
+      (chat) {
+        chat.ckRecordId = null;
+        chat.ckSyncState = false;
+        chat.cloudData = null;
+        chat.photoAttachmentGuid = null;
+      },
+    );
+    
+    await _clearCkIds(
+      Database.attachments,
+      () => Database.attachments.query().build(),
+      (attachment) {
+        attachment.ckRecordId = null;
+      },
+    );
   }
 
   // forcibly stops a running sync operation.
